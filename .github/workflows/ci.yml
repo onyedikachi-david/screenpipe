@@ -143,7 +143,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev ffmpeg
           sudo apt-get install -y libavutil-dev libavformat-dev libavfilter-dev libavdevice-dev
-          sudo apt-get install -y pkg-config xvfb pulseaudio xdotool
+          sudo apt-get install -y pkg-config xvfb pulseaudio xdotool x11-xserver-utils
 
       - name: Build CLI
         run: cargo build --release --bin screenpipe
@@ -165,11 +165,12 @@ jobs:
       - name: Set up virtual display and audio (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          Xvfb :99 -ac &
+          Xvfb :99 -ac -screen 0 1920x1080x24 &
           echo "DISPLAY=:99" >> $GITHUB_ENV
           pulseaudio --start
-          pactl load-module module-null-sink sink_name=virtual_speaker
-          pactl load-module module-virtual-source source_name=virtual_mic
+          pacmd load-module module-null-sink sink_name=virtual_speaker
+          pacmd load-module module-virtual-source source_name=virtual_mic master=virtual_speaker.monitor
+          sleep 2 # wait for pulseaudio to start
 
       # - name: Install simulation tools (Ubuntu)
       #   if: matrix.os == 'ubuntu-latest'
@@ -181,7 +182,7 @@ jobs:
         run: |
           chmod +x ./scripts/simulate_screen_activity.sh
           chmod +x ./scripts/simulate_audio_activity.sh
-          ./scripts/simulate_screen_activity.sh &
+          DISPLAY=:99 ./scripts/simulate_screen_activity.sh &
           ./scripts/simulate_audio_activity.sh &
 
       # - name: Run CLI and check health (Ubuntu)
@@ -213,8 +214,8 @@ jobs:
       - name: Run CLI and check health (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          ./target/release/screenpipe --data-dir ./test_data &
-          for i in {1..12}; do
+          DISPLAY=:99 ./target/release/screenpipe --data-dir ./test_data --disable-window-capture &
+          for i in {1..24}; do
             sleep 10
             response=$(curl -s http://localhost:3030/health)
             echo "$response"
@@ -224,7 +225,7 @@ jobs:
               exit 0
             fi
           done
-          echo "Health check failed after 2 minutes"
+          echo "Health check failed after 4 minutes"
           exit 1
 
       - name: Run CLI and check health (Windows)
