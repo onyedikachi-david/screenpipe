@@ -2,9 +2,9 @@
 
 # Check if running on Ubuntu
 if [[ "$(uname)" == "Linux" ]]; then
-  # Generate a silent audio file
-  ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t 10 -q:a 9 -acodec libmp3lame silence.mp3
+  # Generate a simple melody using Sox
+  sox -n generated_audio.wav synth 0.5 sine 440 synth 0.5 sine 494 synth 0.5 sine 523 synth 0.5 sine 587 synth 0.5 sine 659 synth 0.5 sine 698 synth 0.5 sine 784 synth 0.5 sine 880
 
-  # Play the silent audio file (this will create audio activity without actual sound)
-  ffplay -nodisp -autoexit silence.mp3
+  # Play the generated audio file
+  play generated_audio.wav
 fi
