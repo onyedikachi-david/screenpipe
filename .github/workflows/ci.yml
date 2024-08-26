@@ -144,6 +144,8 @@ jobs:
           sudo apt-get install -y libasound2-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev ffmpeg
           sudo apt-get install -y libavutil-dev libavformat-dev libavfilter-dev libavdevice-dev
           sudo apt-get install -y pkg-config xvfb pulseaudio xdotool x11-xserver-utils sox
+          sudo apt-get install -y libx11-dev libxcb1-dev
+          sudo apt-get install -y scrot
 
       - name: Build CLI
         run: cargo build --release --bin screenpipe
@@ -225,7 +227,9 @@ jobs:
             response=$(curl -s http://localhost:3030/health)
             echo "$response"
             status=$(echo "$response" | jq -r '.status')
-            if [[ "$status" == "Healthy" ]]; then
+            frame_status=$(echo "$response" | jq -r '.frame_status')
+            audio_status=$(echo "$response" | jq -r '.audio_status')
+            if [[ "$status" == "Healthy" && "$frame_status" == "OK" && "$audio_status" == "OK" ]]; then
               echo "Health check passed"
               exit 0
             fi
@@ -233,31 +237,38 @@ jobs:
             echo "Iteration $i: Current window list"
             DISPLAY=:99 xwininfo -root -children
             echo "Current processes:"
-            ps aux | grep -E 'Xvfb|xterm|screenpipe'
+            ps aux | grep -E 'Xvfb|xterm|screenpipe|simulate'
           done
           echo "Health check failed after 4 minutes"
           echo "Xvfb log:"
           cat /var/log/Xvfb.0.log
+          echo "screenpipe log:"
+          cat ./test_data/logs/screenpipe.log
           exit 1
 
       - name: Run CLI and check health (Windows)
         if: matrix.os == 'windows-latest'
         run: |
           Start-Process -FilePath .\target\release\screenpipe.exe -ArgumentList "--data-dir", ".\test_data" -NoNewWindow
-          $attempts = 12
+          Start-Process -FilePath powershell -ArgumentList "-File", ".\scripts\simulate_screen_activity.ps1" -NoNewWindow
+          Start-Process -FilePath powershell -ArgumentList "-File", ".\scripts\simulate_audio_activity.ps1" -NoNewWindow
+          $attempts = 24
           $interval = 10
           for ($i = 0; $i -lt $attempts; $i++) {
             Start-Sleep -Seconds $interval
             try {
               $response = Invoke-RestMethod -Uri http://localhost:3030/health
               $response | ConvertTo-Json
-              if ($response.status -eq "Healthy") {
+              if ($response.status -eq "Healthy" -and $response.frame_status -eq "OK" -and $response.audio_status -eq "OK") {
                 Write-Output "Health check passed"
                 exit 0
               }
             } catch {
               Write-Output "Error occurred while checking health: $_"
             }
+            Write-Output "Current processes:"
+            Get-Process | Where-Object { $_.Name -match 'screenpipe|powershell' } | Format-Table -AutoSize
           }
-          Write-Error "Health check failed after 2 minutes"
+          Write-Error "Health check failed after 4 minutes"
+          Get-Content .\test_data\logs\screenpipe.log
           exit 1

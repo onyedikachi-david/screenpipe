@@ -4,9 +4,9 @@
 if [[ "$(uname)" == "Linux" ]]; then
   # Function to simulate mouse movement
   simulate_mouse() {
-    for i in {1..10}; do
-      xdotool mousemove $((100 + RANDOM % 300)) $((100 + RANDOM % 200))
-      sleep 0.5
+    for i in {1..20}; do
+      xdotool mousemove $((RANDOM % 1024)) $((RANDOM % 768))
+      sleep 0.2
     done
   }
 
@@ -20,12 +20,9 @@ if [[ "$(uname)" == "Linux" ]]; then
   }
 
   # Main simulation loop
-  for i in {1..6}; do
+  while true; do
     simulate_mouse
     simulate_typing
     sleep 1
   done
-
-  # Keep the script running for a while to allow screen capture
-  sleep 30
 fi
