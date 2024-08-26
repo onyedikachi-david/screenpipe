@@ -165,9 +165,12 @@ jobs:
       - name: Set up virtual display and audio (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          sudo apt-get install -y xvfb pulseaudio ffmpeg imagemagick xdotool
+          sudo apt-get update
+          sudo apt-get install -y xvfb pulseaudio ffmpeg imagemagick xdotool x11-xserver-utils metacity
           Xvfb :99 -ac -screen 0 1024x768x24 &
           echo "DISPLAY=:99" >> $GITHUB_ENV
+          sleep 2
+          metacity --sm-disable --replace 2> metacity.err &
           pulseaudio --start
           pacmd load-module module-null-sink sink_name=virtual_speaker
           pacmd load-module module-virtual-source source_name=virtual_mic master=virtual_speaker.monitor
@@ -227,6 +230,8 @@ jobs:
             fi
           done
           echo "Health check failed after 4 minutes"
+          echo "Metacity error log:"
+          cat metacity.err
           exit 1
 
       - name: Run CLI and check health (Windows)
