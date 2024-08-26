@@ -114,3 +114,89 @@ jobs:
         env:
           DYLD_LIBRARY_PATH: /Users/runner/work/screenpipe/screenpipe/screenpipe-vision/lib
         run: cargo test test_apple_native_ocr
+
+  test-cli:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev ffmpeg
+
+      - name: Build CLI
+        run: cargo build --release --bin screenpipe
+
+      - name: Set up virtual display (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get install -y xvfb
+          Xvfb :99 &
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+
+      - name: Set up virtual audio (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get install -y pulseaudio
+          pulseaudio --start
+          pactl load-module module-null-sink sink_name=virtual_speaker
+          pactl load-module module-virtual-source source_name=virtual_mic
+
+      - name: Install simulation tools (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get install -y xdotool ffmpeg
+
+      - name: Simulate screen and audio activity (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          chmod +x ./scripts/simulate_screen_activity.sh
+          chmod +x ./scripts/simulate_audio_activity.sh
+          ./scripts/simulate_screen_activity.sh &
+          ./scripts/simulate_audio_activity.sh &
+
+      - name: Run CLI and check health (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          ./target/release/screenpipe --data-dir ./test_data &
+          sleep 30
+          response=$(curl -s http://localhost:3030/health)
+          echo "$response"
+          status=$(echo "$response" | jq -r '.status')
+          if [[ "$status" != "Healthy" ]]; then
+            echo "Health check failed: status is $status"
+            exit 1
+          fi
+          killall screenpipe
+
+      - name: Run CLI and check health (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          Start-Process -FilePath .\target\release\screenpipe.exe -ArgumentList "--data-dir", ".\test_data" -NoNewWindow
+          Start-Sleep -Seconds 30
+          $response = Invoke-RestMethod -Uri http://localhost:3030/health
+          $response | ConvertTo-Json
+          if ($response.status -ne "Healthy") {
+            Write-Error "Health check failed: status is $($response.status)"
+            exit 1
+          }
+          Stop-Process -Name screenpipe
