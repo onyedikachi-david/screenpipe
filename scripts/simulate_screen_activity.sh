@@ -5,13 +5,14 @@ if [[ "$(uname)" == "Linux" ]]; then
   # Function to simulate mouse movement
   simulate_mouse() {
     for i in {1..10}; do
-      xdotool mousemove $((RANDOM % 1024)) $((RANDOM % 768))
+      xdotool mousemove $((RANDOM % 400)) $((RANDOM % 300))
       sleep 0.5
     done
   }
 
   # Function to simulate typing
   simulate_typing() {
+    xdotool key Tab  # Focus on the window
     xdotool type "Screenpipe Test Content"
     xdotool key Return
     xdotool type "This is a test of screenpipe CLI"
