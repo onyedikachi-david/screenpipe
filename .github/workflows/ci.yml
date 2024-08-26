@@ -238,6 +238,8 @@ jobs:
             DISPLAY=:99 xwininfo -root -children
             echo "Current processes:"
             ps aux | grep -E 'Xvfb|xterm|screenpipe|simulate'
+            echo "Screenshot exists:"
+            ls -l /tmp/screenshot.png
           done
           echo "Health check failed after 4 minutes"
           echo "Xvfb log:"

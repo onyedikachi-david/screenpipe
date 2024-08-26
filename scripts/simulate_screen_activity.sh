@@ -19,10 +19,16 @@ if [[ "$(uname)" == "Linux" ]]; then
     xdotool key Return
   }
 
+  # Function to capture screenshot
+  capture_screenshot() {
+    scrot -o /tmp/screenshot.png
+  }
+
   # Main simulation loop
   while true; do
     simulate_mouse
     simulate_typing
+    capture_screenshot
     sleep 1
   done
 fi
