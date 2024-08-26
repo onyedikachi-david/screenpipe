@@ -2,6 +2,9 @@
 
 # Check if running on Ubuntu
 if [[ "$(uname)" == "Linux" ]]; then
-  # Play a test audio file through the virtual speaker
-  ffplay -nodisp -autoexit -f lavfi -i sine=frequency=1000:duration=5 -af 'asetpts=PTS-STARTPTS' &
+  # Generate a silent audio file
+  ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t 10 -q:a 9 -acodec libmp3lame silence.mp3
+
+  # Play the silent audio file (this will create audio activity without actual sound)
+  ffplay -nodisp -autoexit silence.mp3
 fi

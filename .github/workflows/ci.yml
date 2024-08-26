@@ -214,7 +214,7 @@ jobs:
       - name: Run CLI and check health (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          DISPLAY=:99 ./target/release/screenpipe --data-dir ./test_data &
+          DISPLAY=:99 ./target/release/screenpipe --data-dir ./test_data --fps 1 &
           for i in {1..24}; do
             sleep 10
             response=$(curl -s http://localhost:3030/health)
