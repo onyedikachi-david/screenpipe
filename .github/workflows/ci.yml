@@ -168,9 +168,11 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb pulseaudio ffmpeg imagemagick xdotool x11-xserver-utils xterm
+          sudo apt-get install -y xvfb pulseaudio ffmpeg imagemagick xdotool x11-xserver-utils xterm openbox
           Xvfb :99 -ac -screen 0 1024x768x24 &
           echo "DISPLAY=:99" >> $GITHUB_ENV
+          sleep 2
+          openbox &
           sleep 2
           pulseaudio --start
           pacmd load-module module-null-sink sink_name=virtual_speaker
@@ -237,9 +239,13 @@ jobs:
             echo "Iteration $i: Current window list"
             DISPLAY=:99 xwininfo -root -children
             echo "Current processes:"
-            ps aux | grep -E 'Xvfb|xterm|screenpipe|simulate'
+            ps aux | grep -E 'Xvfb|xterm|screenpipe|simulate|openbox'
             echo "Screenshot exists:"
             ls -l /tmp/screenshot.png
+            echo "X11 environment variables:"
+            env | grep -E 'DISPLAY|XAUTHORITY'
+            echo "X11 server check:"
+            xdpyinfo | head -n 5
           done
           echo "Health check failed after 4 minutes"
           echo "Xvfb log:"

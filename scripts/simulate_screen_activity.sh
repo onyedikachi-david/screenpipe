@@ -21,7 +21,7 @@ if [[ "$(uname)" == "Linux" ]]; then
 
   # Function to capture screenshot
   capture_screenshot() {
-    scrot -o /tmp/screenshot.png
+    xwd -root -silent | convert xwd:- png:/tmp/screenshot.png
   }
 
   # Main simulation loop
