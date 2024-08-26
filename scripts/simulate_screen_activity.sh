@@ -2,6 +2,9 @@
 
 # Check if running on Ubuntu
 if [[ "$(uname)" == "Linux" ]]; then
+  # Set a specific resolution
+  xrandr --fb 1024x768
+
   # Function to simulate mouse movement
   simulate_mouse() {
     for i in {1..20}; do
@@ -21,7 +24,7 @@ if [[ "$(uname)" == "Linux" ]]; then
 
   # Function to capture screenshot
   capture_screenshot() {
-    xwd -root -silent | convert xwd:- png:/tmp/screenshot.png
+    import -window root /tmp/screenshot.png
   }
 
   # Main simulation loop

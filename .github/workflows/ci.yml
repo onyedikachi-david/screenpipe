@@ -168,12 +168,16 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb pulseaudio ffmpeg imagemagick xdotool x11-xserver-utils xterm openbox
+          sudo apt-get install -y xvfb pulseaudio ffmpeg imagemagick xdotool x11-xserver-utils xterm openbox alsa-utils
           Xvfb :99 -ac -screen 0 1024x768x24 &
           echo "DISPLAY=:99" >> $GITHUB_ENV
           sleep 2
           openbox &
           sleep 2
+          # Set up dummy audio device
+          sudo modprobe snd-dummy
+          sudo sh -c "echo 'pcm.!default { type hw card 0 }' > /etc/asound.conf"
+          sudo sh -c "echo 'ctl.!default { type hw card 0 }' >> /etc/asound.conf"
           pulseaudio --start
           pacmd load-module module-null-sink sink_name=virtual_speaker
           pacmd load-module module-virtual-source source_name=virtual_mic master=virtual_speaker.monitor
@@ -246,6 +250,10 @@ jobs:
             env | grep -E 'DISPLAY|XAUTHORITY'
             echo "X11 server check:"
             xdpyinfo | head -n 5
+            echo "Audio devices:"
+            aplay -l
+            echo "PulseAudio status:"
+            pactl info
           done
           echo "Health check failed after 4 minutes"
           echo "Xvfb log:"
