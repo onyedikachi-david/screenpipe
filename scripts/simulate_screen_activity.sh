@@ -5,7 +5,7 @@ if [[ "$(uname)" == "Linux" ]]; then
   # Function to simulate mouse movement
   simulate_mouse() {
     for i in {1..10}; do
-      xdotool mousemove $((RANDOM % 400)) $((RANDOM % 300))
+      xdotool mousemove $((100 + RANDOM % 300)) $((100 + RANDOM % 200))
       sleep 0.5
     done
   }
