@@ -155,7 +155,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb pulseaudio ffmpeg imagemagick xdotool x11-xserver-utils xterm openbox alsa-utils
-          Xvfb :99 -ac -screen 0 1024x768x24 &
+          Xvfb :99 -ac -screen 0 1024x768 &
           export DISPLAY=:99
           echo "DISPLAY=:99" >> $GITHUB_ENV
           sleep 2
@@ -199,6 +199,8 @@ jobs:
             ps aux | grep -E 'Xvfb|xterm|screenpipe|simulate|openbox'
             echo "Screenshot exists:"
             ls -l /tmp/screenshot.png
+            echo "Screenshot content:"
+            file /tmp/screenshot.png
             echo "X11 environment variables:"
             env | grep -E 'DISPLAY|XAUTHORITY'
             echo "X11 server check:"
@@ -207,6 +209,8 @@ jobs:
             aplay -l
             echo "PulseAudio status:"
             pactl info
+            echo "Screenpipe log tail:"
+            tail -n 50 ./test_data/logs/screenpipe.log
           done
           echo "Health check failed after 4 minutes"
           echo "Xvfb log:"

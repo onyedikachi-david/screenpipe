@@ -24,7 +24,7 @@ if [[ "$(uname)" == "Linux" ]]; then
 
   # Function to capture screenshot
   capture_screenshot() {
-    import -window root /tmp/screenshot.png
+    scrot -o /tmp/screenshot.png
   }
 
   # Main simulation loop
