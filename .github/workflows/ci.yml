@@ -263,11 +263,22 @@ jobs:
           $env:RUST_BACKTRACE = "1"
           New-Item -ItemType Directory -Force -Path .\test_data\logs
 
-          # Start screenpipe
-          Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
+          # Start screenpipe and capture its process ID
+          $screenpipeProcess = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
+          $screenpipePID = $screenpipeProcess.Id
+          Write-Output "Screenpipe started with PID: $screenpipePID"
 
           # Wait for screenpipe to start
           Start-Sleep -Seconds 20
+
+          # Check if screenpipe is still running
+          $runningProcess = Get-Process -Id $screenpipePID -ErrorAction SilentlyContinue
+          if ($null -eq $runningProcess) {
+            Write-Error "Screenpipe process has exited unexpectedly"
+            Get-Content .\test_data\logs\screenpipe.log
+            Get-Content .\test_data\logs\screenpipe_error.log
+            exit 1
+          }
 
           # Start screen and audio simulation
           Start-Process -FilePath powershell -ArgumentList "-File", ".\scripts\simulate_screen_activity.ps1" -NoNewWindow
@@ -278,6 +289,16 @@ jobs:
           $interval = 10
           for ($i = 0; $i -lt $attempts; $i++) {
             Start-Sleep -Seconds $interval
+            
+            # Check if screenpipe is still running
+            $runningProcess = Get-Process -Id $screenpipePID -ErrorAction SilentlyContinue
+            if ($null -eq $runningProcess) {
+              Write-Error "Screenpipe process has exited unexpectedly during health checks"
+              Get-Content .\test_data\logs\screenpipe.log
+              Get-Content .\test_data\logs\screenpipe_error.log
+              exit 1
+            }
+            
             try {
               $response = Invoke-RestMethod -Uri http://localhost:3030/health -ErrorAction Stop
               Write-Output "Health check $($i+1): $($response | ConvertTo-Json -Compress)"
@@ -295,4 +316,6 @@ jobs:
           Get-Content .\test_data\logs\screenpipe_error.log
           Write-Output "Process list:"
           Get-Process | Where-Object { $_.Name -match 'screenpipe|ffmpeg' } | Format-Table -AutoSize
+          Write-Output "Network connections:"
+          netstat -ano | Select-String "3030"
           exit 1
