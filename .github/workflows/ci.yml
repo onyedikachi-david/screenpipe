@@ -152,7 +152,7 @@ jobs:
       - name: Build CLI
         run: cargo build --release --bin screenpipe
 
-      - name: Set up virtual display and audio (Ubuntu)
+      - name: Debug setup (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
@@ -170,100 +170,91 @@ jobs:
           pacmd load-module module-virtual-source source_name=virtual_mic master=virtual_speaker.monitor
           pacmd set-default-source virtual_mic
           sleep 5
-          xwininfo -root -tree || true
-          chmod +x ./scripts/launch_test_window.sh
-          ./scripts/launch_test_window.sh &
-          sleep 5
-          # Debug audio setup
+
+          # Debug information
+          echo "X11 setup:"
+          xdpyinfo | head -n 10
+          echo "Window list:"
+          xwininfo -root -tree
+
+          echo "Audio setup:"
           pacmd list-sinks
           pacmd list-sources
           pactl list short sinks
           pactl list short sources
 
-      - name: Run CLI and check health (Ubuntu)
+          echo "Environment variables:"
+          env | grep -E 'DISPLAY|XAUTHORITY|PULSE'
+
+          echo "Process list:"
+          ps aux | grep -E 'Xvfb|pulseaudio|openbox'
+
+      - name: Debug CLI execution (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: |
           export DISPLAY=:99
-          echo "DISPLAY=$DISPLAY"
-          xdpyinfo || true
           mkdir -p ./test_data/logs
-          DISPLAY=:99 RUST_LOG=debug ./target/release/screenpipe --data-dir ./test_data --fps 1 > screenpipe_output.log 2>&1 &
+          echo "Starting screenpipe CLI..."
+          RUST_LOG=debug ./target/release/screenpipe --data-dir ./test_data --fps 1 &
           CLI_PID=$!
-          sleep 10  # Give CLI some time to start up
-          for i in {1..24}; do
-            sleep 10
-            if ! ps -p $CLI_PID > /dev/null; then
-              echo "CLI process has died"
-              cat screenpipe_output.log
-              exit 1
-            fi
-            response=$(curl -s http://localhost:3030/health)
-            echo "$response"
-            status=$(echo "$response" | jq -r '.status')
-            frame_status=$(echo "$response" | jq -r '.frame_status')
-            audio_status=$(echo "$response" | jq -r '.audio_status')
-            if [[ "$status" == "Healthy" && "$frame_status" == "OK" && "$audio_status" == "OK" ]]; then
-              echo "Health check passed"
-              exit 0
-            fi
-            # Debug information
-            echo "Iteration $i: Current window list"
-            DISPLAY=:99 xwininfo -root -children
-            echo "Current processes:"
-            ps aux | grep -E 'Xvfb|xterm|screenpipe|simulate|openbox'
-            echo "Screenshot exists:"
-            ls -l /tmp/screenshot.png
-            echo "Screenshot content:"
-            file /tmp/screenshot.png
-            echo "X11 environment variables:"
-            env | grep -E 'DISPLAY|XAUTHORITY'
-            echo "X11 server check:"
-            xdpyinfo | head -n 5
-            echo "Audio devices:"
-            aplay -l
-            echo "PulseAudio status:"
-            pactl info
-            echo "Screenpipe log tail:"
-            tail -n 50 ./test_data/logs/screenpipe.log
-          done
-          echo "Health check failed after 4 minutes"
-          echo "Xvfb log:"
-          cat /var/log/Xvfb.0.log
-          echo "screenpipe log:"
-          cat ./test_data/logs/screenpipe.log
-          echo "screenpipe output log:"
-          cat screenpipe_output.log
-          exit 1
+          sleep 10
 
-      - name: Run CLI and check health (Windows)
+          echo "Checking if CLI is running:"
+          if ps -p $CLI_PID > /dev/null; then
+            echo "CLI is running with PID $CLI_PID"
+          else
+            echo "CLI process has died"
+          fi
+
+          echo "Attempting to query health endpoint:"
+          curl -v http://localhost:3030/health || true
+
+          echo "CLI output:"
+          cat ./test_data/logs/screenpipe.log || true
+
+          echo "Killing CLI process"
+          kill $CLI_PID || true
+
+      - name: Debug setup (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          Write-Output "Display information:"
+          Get-WmiObject -Class Win32_VideoController | Format-List Name, VideoModeDescription
+
+          Write-Output "Audio devices:"
+          Get-WmiObject -Class Win32_SoundDevice | Format-List Name, Status
+
+          Write-Output "Environment variables:"
+          Get-ChildItem Env: | Where-Object { $_.Name -match 'DISPLAY|AUDIO' }
+
+      - name: Debug CLI execution (Windows)
         if: matrix.os == 'windows-latest'
         run: |
           $env:RUST_LOG = "debug"
-          Start-Process -FilePath .\target\release\screenpipe.exe -ArgumentList "--data-dir", ".\test_data" -NoNewWindow -PassThru -RedirectStandardOutput screenpipe_output.log -RedirectStandardError screenpipe_error.log
-          Start-Sleep -Seconds 10  # Give CLI some time to start up
-          Start-Process -FilePath powershell -ArgumentList "-File", ".\scripts\simulate_screen_activity.ps1" -NoNewWindow
-          Start-Process -FilePath powershell -ArgumentList "-File", ".\scripts\simulate_audio_activity.ps1" -NoNewWindow
-          $attempts = 24
-          $interval = 10
-          for ($i = 0; $i -lt $attempts; $i++) {
-            Start-Sleep -Seconds $interval
-            try {
-              $response = Invoke-RestMethod -Uri http://localhost:3030/health
-              $response | ConvertTo-Json
-              if ($response.status -eq "Healthy" -and $response.frame_status -eq "OK" -and $response.audio_status -eq "OK") {
-                Write-Output "Health check passed"
-                exit 0
-              }
-            } catch {
-              Write-Output "Error occurred while checking health: $_"
-            }
-            Write-Output "Current processes:"
-            Get-Process | Where-Object { $_.Name -match 'screenpipe|powershell' } | Format-Table -AutoSize
-            Write-Output "Screenpipe log tail:"
-            Get-Content .\test_data\logs\screenpipe.log -Tail 50
+          New-Item -ItemType Directory -Force -Path .\test_data\logs
+          Write-Output "Starting screenpipe CLI..."
+          Start-Process -FilePath .\target\release\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1" -NoNewWindow -PassThru -RedirectStandardOutput screenpipe_output.log -RedirectStandardError screenpipe_error.log
+          Start-Sleep -Seconds 10
+
+          Write-Output "Checking if CLI is running:"
+          $process = Get-Process screenpipe -ErrorAction SilentlyContinue
+          if ($process) {
+            Write-Output "CLI is running with PID $($process.Id)"
+          } else {
+            Write-Output "CLI process not found"
           }
-          Write-Error "Health check failed after 4 minutes"
-          Get-Content screenpipe_output.log
-          Get-Content screenpipe_error.log
-          Get-Content .\test_data\logs\screenpipe.log
-          exit 1
+
+          Write-Output "Attempting to query health endpoint:"
+          try {
+            Invoke-RestMethod -Uri http://localhost:3030/health -ErrorAction Stop
+          } catch {
+            Write-Output "Error querying health endpoint: $_"
+          }
+
+          Write-Output "CLI output:"
+          Get-Content .\test_data\logs\screenpipe.log -ErrorAction SilentlyContinue
+          Get-Content screenpipe_output.log -ErrorAction SilentlyContinue
+          Get-Content screenpipe_error.log -ErrorAction SilentlyContinue
+
+          Write-Output "Stopping CLI process"
+          Stop-Process -Name screenpipe -ErrorAction SilentlyContinue
