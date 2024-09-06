@@ -179,7 +179,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb openbox pulseaudio pavucontrol xdotool x11-xserver-utils
+          sudo apt-get install -y xvfb openbox pulseaudio pavucontrol xdotool x11-xserver-utils sox
 
       - name: Set up virtual display and audio (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
