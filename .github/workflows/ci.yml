@@ -179,7 +179,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb pulseaudio ffmpeg imagemagick xdotool x11-xserver-utils xterm openbox alsa-utils sox
+          sudo apt-get install -y xvfb pulseaudio ffmpeg imagemagick xdotool x11-xserver-utils xterm openbox alsa-utils sox tesseract-ocr libtesseract-dev
 
           # Start Xvfb
           Xvfb :99 -ac -screen 0 1024x768x24 &
@@ -224,7 +224,7 @@ jobs:
           # Run screenpipe
           chmod +x ./screenpipe
           mkdir -p ./test_data/logs
-          RUST_LOG=debug ./screenpipe --data-dir ./test_data --fps 1 &
+          RUST_LOG=debug RUST_BACKTRACE=1 ./screenpipe --data-dir ./test_data --fps 1 &
           CLI_PID=$!
           sleep 10
 
@@ -247,6 +247,8 @@ jobs:
           cat ./test_data/logs/screenpipe.log
           echo "Xvfb log:"
           cat /tmp/.X99-lock
+          echo "Process list:"
+          ps aux | grep -E 'Xvfb|pulseaudio|openbox|xterm|screenpipe'
           exit 1
 
       - name: Setup and run CLI (Windows)
