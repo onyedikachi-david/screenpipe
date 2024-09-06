@@ -19,7 +19,7 @@ try {
 
 while ($true) {
     try {
-        $synthesizer.Speak("This is a test of screenpipe CLI audio capture")
+        $synthesizer.SpeakAsync("This is a test of screenpipe CLI audio capture")
         Start-Sleep -Seconds 2
     } catch {
         Write-Output "Error during speech synthesis: $_"

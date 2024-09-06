@@ -256,14 +256,15 @@ jobs:
         run: |
           # Install FFmpeg
           choco install ffmpeg -y
-          refreshenv
+          $env:Path += ";C:\ProgramData\chocolatey\bin"
 
           # Set up environment
           $env:RUST_LOG = "debug"
+          $env:RUST_BACKTRACE = "1"
           New-Item -ItemType Directory -Force -Path .\test_data\logs
 
           # Start screenpipe
-          Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1" -NoNewWindow -PassThru
+          Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
 
           # Wait for screenpipe to start
           Start-Sleep -Seconds 20
@@ -291,6 +292,7 @@ jobs:
 
           Write-Error "Health check failed after 5 minutes"
           Get-Content .\test_data\logs\screenpipe.log
+          Get-Content .\test_data\logs\screenpipe_error.log
           Write-Output "Process list:"
           Get-Process | Where-Object { $_.Name -match 'screenpipe|ffmpeg' } | Format-Table -AutoSize
           exit 1
