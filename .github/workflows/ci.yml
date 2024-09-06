@@ -180,12 +180,22 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb pulseaudio ffmpeg imagemagick xdotool x11-xserver-utils xterm openbox alsa-utils sox
+
+          # Start Xvfb
           Xvfb :99 -ac -screen 0 1024x768x24 &
           export DISPLAY=:99
           echo "DISPLAY=:99" >> $GITHUB_ENV
           sleep 5
+
+          # Start window manager
           openbox &
           sleep 5
+
+          # Start a visible application
+          xterm -e "echo 'Test Window'; while true; do date; sleep 1; done" &
+          sleep 5
+
+          # Setup audio
           pulseaudio --start
           sleep 2
           pactl load-module module-null-sink sink_name=virtual_speaker
@@ -194,17 +204,31 @@ jobs:
           pactl set-default-source virtual_mic
           sleep 5
 
-          chmod +x ./screenpipe
+          # Debug information
+          echo "Window list:"
+          xwininfo -root -tree
+
+          echo "Display info:"
+          xdpyinfo | head -n 20
+
+          echo "Audio devices:"
+          pactl list short sinks
+          pactl list short sources
+
+          # Start screen and audio simulation
           chmod +x ./scripts/simulate_screen_activity.sh
           chmod +x ./scripts/simulate_audio_activity.sh
           ./scripts/simulate_screen_activity.sh &
           ./scripts/simulate_audio_activity.sh &
 
+          # Run screenpipe
+          chmod +x ./screenpipe
           mkdir -p ./test_data/logs
           RUST_LOG=debug ./screenpipe --data-dir ./test_data --fps 1 &
           CLI_PID=$!
           sleep 10
 
+          # Health checks
           for i in {1..30}; do
             response=$(curl -s http://localhost:3030/health)
             echo "Health check $i: $response"
@@ -219,7 +243,10 @@ jobs:
           done
 
           echo "Health check failed after 5 minutes"
+          echo "Screenpipe log:"
           cat ./test_data/logs/screenpipe.log
+          echo "Xvfb log:"
+          cat /tmp/.X99-lock
           exit 1
 
       - name: Setup and run CLI (Windows)
