@@ -34,7 +34,7 @@ use screenpipe_server::{
 use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
 use tokio::{
     sync::mpsc::channel,
-    time::{interval, interval_at, Instant},
+    time::{interval_at, Instant},
 };
 
 fn print_devices(devices: &[AudioDevice]) {
@@ -213,8 +213,13 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let (restart_sender, mut restart_receiver) = channel(10);
-    let resource_monitor =
-        ResourceMonitor::new(cli.self_healing, Duration::from_secs(60), 3, restart_sender);
+    let resource_monitor = ResourceMonitor::new(
+        cli.self_healing,
+        Duration::from_secs(60),
+        3,
+        restart_sender,
+        cli.port,
+    );
     resource_monitor.start_monitoring(Duration::from_secs(10));
 
     let db = Arc::new(
@@ -317,6 +322,7 @@ async fn main() -> anyhow::Result<()> {
                     friend_wearable_uid_clone, // Use the cloned version
                     monitor_id,
                     cli.use_pii_removal,
+                    cli.disable_vision,
                 )
                 .await;
 
@@ -349,24 +355,6 @@ async fn main() -> anyhow::Result<()> {
         server.start(devices_status, api_plugin).await.unwrap();
     });
 
-    #[cfg(feature = "pipes")]
-    if !cli.pipe.is_empty() {
-        use tokio::process::Command;
-        // ! HACK until we have clean way to store the bin
-        let status = Command::new("target/release/screenpipe-pipe-runner")
-            .arg("--pipe")
-            .args(&cli.pipe)
-            .status()
-            .await
-            .expect("Failed to start pipe-runner process");
-
-        if !status.success() {
-            eprintln!("pipe-runner process failed with status: {}", status);
-        }
-
-        return Ok(());
-    }
-
     // Wait for the server to start
     info!("Server started on http://localhost:{}", cli.port);
 
@@ -393,6 +381,7 @@ async fn main() -> anyhow::Result<()> {
     );
     println!("│ Port                │ {:<34} │", cli.port);
     println!("│ Audio Disabled      │ {:<34} │", cli.disable_audio);
+    println!("│ Vision Disabled     │ {:<34} │", cli.disable_vision);
     println!("│ Self Healing        │ {:<34} │", cli.self_healing);
     println!("│ Save Text Files     │ {:<34} │", cli.save_text_files);
     println!(
@@ -478,6 +467,34 @@ async fn main() -> anyhow::Result<()> {
             "You are using local processing. All your data stays on your computer.\n"
                 .bright_yellow()
         );
+    }
+
+    #[cfg(feature = "pipes")]
+    if !cli.pipe.is_empty() {
+        use futures::stream::{FuturesUnordered, StreamExt};
+        use screenpipe_server::pipe_runner::run_pipe;
+
+        let mut pipe_futures = FuturesUnordered::new();
+        for pipe in &cli.pipe {
+            pipe_futures.push(run_pipe(pipe));
+        }
+
+        tokio::select! {
+            _ = async {
+                while let Some(result) = pipe_futures.next().await {
+                    if let Err(e) = result {
+                        error!("Error running pipe runner: {}", e);
+                    }
+                }
+            } => {
+                info!("All pipe runners completed");
+            }
+            _ = tokio::signal::ctrl_c() => {
+                info!("Received Ctrl+C, shutting down...");
+            }
+        }
+
+        return Ok(());
     }
 
     // Keep the main thread running

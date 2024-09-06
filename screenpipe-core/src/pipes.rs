@@ -12,12 +12,80 @@ mod pipes {
     use reqwest::header::HeaderMap;
     use reqwest::header::HeaderValue;
     use reqwest::header::CONTENT_TYPE;
+    use std::collections::HashMap;
     use std::env;
     use std::rc::Rc;
 
+    use reqwest::Client;
+    use serde_json::Value;
+
+    #[op2]
+    #[string]
+    fn op_get_env(#[string] key: String) -> Option<String> {
+        env::var(&key).ok()
+    }
+
     #[op2(async)]
     #[string]
-    async fn op_read_file(#[string] path: String) -> Result<String, AnyError> {
+    async fn op_fetch(
+        #[string] url: String,
+        #[serde] options: Option<Value>,
+    ) -> anyhow::Result<String> {
+        let client = Client::new();
+        let mut request = client.get(&url);
+
+        if let Some(opts) = options {
+            if let Some(method) = opts.get("method").and_then(|m| m.as_str()) {
+                request = match method.to_uppercase().as_str() {
+                    "GET" => client.get(&url),
+                    "POST" => client.post(&url),
+                    "PUT" => client.put(&url),
+                    "DELETE" => client.delete(&url),
+                    // Add other methods as needed
+                    _ => return Err(anyhow::anyhow!("Unsupported HTTP method")),
+                };
+            }
+
+            if let Some(headers) = opts.get("headers").and_then(|h| h.as_object()) {
+                for (key, value) in headers {
+                    if let Some(value_str) = value.as_str() {
+                        request = request.header(key, value_str);
+                    }
+                }
+            }
+
+            if let Some(body) = opts.get("body").and_then(|b| b.as_str()) {
+                request = request.body(body.to_string());
+            }
+        }
+
+        let response = match request.send().await {
+            Ok(resp) => resp,
+            Err(e) => return Err(anyhow::anyhow!(e)),
+        };
+
+        let status = response.status();
+        let headers = response.headers().clone();
+        let text = match response.text().await {
+            Ok(t) => t,
+            Err(e) => return Err(anyhow::anyhow!(e)),
+        };
+
+        let result = serde_json::json!({
+            "status": status.as_u16(),
+            "statusText": status.to_string(),
+            "headers": headers.iter()
+                .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
+                .collect::<HashMap<String, String>>(),
+            "text": text,
+        });
+
+        Ok(result.to_string())
+    }
+
+    #[op2(async)]
+    #[string]
+    async fn op_read_file(#[string] path: String) -> anyhow::Result<String> {
         tokio::fs::read_to_string(&path).await.map_err(|e| {
             error!("Failed to read file '{}': {}", path, e);
             AnyError::from(e)
@@ -29,7 +97,7 @@ mod pipes {
     async fn op_write_file(
         #[string] path: String,
         #[string] contents: String,
-    ) -> Result<(), AnyError> {
+    ) -> anyhow::Result<()> {
         tokio::fs::write(&path, contents).await.map_err(|e| {
             error!("Failed to write file '{}': {}", path, e);
             AnyError::from(e)
@@ -38,7 +106,7 @@ mod pipes {
 
     #[op2(async)]
     #[string]
-    async fn op_fetch_get(#[string] url: String) -> Result<String, AnyError> {
+    async fn op_fetch_get(#[string] url: String) -> anyhow::Result<String> {
         let response = reqwest::get(&url).await?;
         let status = response.status();
         let text = response.text().await?;
@@ -59,7 +127,7 @@ mod pipes {
     async fn op_fetch_post(
         #[string] url: String,
         #[string] body: String,
-    ) -> Result<String, AnyError> {
+    ) -> anyhow::Result<String> {
         let client = reqwest::Client::new();
 
         // Create a HeaderMap and add the Content-Type header
@@ -83,13 +151,13 @@ mod pipes {
     }
 
     #[op2(async)]
-    async fn op_set_timeout(delay: f64) -> Result<(), AnyError> {
+    async fn op_set_timeout(delay: f64) -> anyhow::Result<()> {
         tokio::time::sleep(std::time::Duration::from_millis(delay as u64)).await;
         Ok(())
     }
 
     #[op2(fast)]
-    fn op_remove_file(#[string] path: String) -> Result<(), AnyError> {
+    fn op_remove_file(#[string] path: String) -> anyhow::Result<()> {
         std::fs::remove_file(path)?;
         Ok(())
     }
@@ -177,10 +245,12 @@ mod pipes {
             op_fetch_get,
             op_fetch_post,
             op_set_timeout,
+            op_fetch,
+            op_get_env,
         ]
     }
 
-    pub async fn run_js(file_path: &str) -> Result<(), AnyError> {
+    pub async fn run_js(file_path: &str) -> anyhow::Result<()> {
         let main_module = deno_core::resolve_path(file_path, env::current_dir()?.as_path())?;
         let mut js_runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
             module_loader: Some(Rc::new(TsModuleLoader)),
@@ -189,10 +259,39 @@ mod pipes {
             ..Default::default()
         });
 
+        // Initialize process.env
+        js_runtime.execute_script("main", "globalThis.process = { env: {} }")?;
+
+        for (key, value) in env::vars() {
+            if key.starts_with("SCREENPIPE_") {
+                js_runtime
+                    .execute_script("main", format!("process.env['{}'] = '{}'", key, value))?;
+            }
+        }
+
         let mod_id = js_runtime.load_main_es_module(&main_module).await?;
-        let result = js_runtime.mod_evaluate(mod_id);
-        js_runtime.run_event_loop(Default::default()).await?;
-        result.await
+        let evaluate_future = js_runtime.mod_evaluate(mod_id);
+
+        // Run the event loop and handle potential errors
+        match js_runtime.run_event_loop(Default::default()).await {
+            Ok(_) => (),
+            Err(e) => {
+                error!("Error in JavaScript runtime event loop: {}", e);
+                // ! avoid crashing screenpipe if pipes broken
+                // You can choose to return the error or handle it differently
+                // return Err(anyhow::anyhow!("JavaScript runtime error: {}", e));
+            }
+        }
+
+        // Evaluate the module and handle potential errors
+        match evaluate_future.await {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                error!("Error evaluating JavaScript module: {}", e);
+                // You can choose to return the error or handle it differently
+                Err(anyhow::anyhow!("JavaScript module evaluation error: {}", e))
+            }
+        }
     }
 }
 

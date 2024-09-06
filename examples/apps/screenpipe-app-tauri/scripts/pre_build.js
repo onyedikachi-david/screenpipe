@@ -3,6 +3,8 @@ import fs from 'fs/promises'
 import os from 'os'
 import path from 'path'
 
+const isDevMode = process.env.SCREENPIPE_APP_DEV === 'true' || false;
+
 const originalCWD = process.cwd()
 // Change CWD to src-tauri
 process.chdir(path.join(__dirname, '../src-tauri'))
@@ -132,6 +134,8 @@ if (platform == 'linux') {
 		// uncomment the following line if you want the script to exit on failure
 		// process.exit(1);
 	}
+
+
 }
 
 /* ########## Windows ########## */
@@ -166,6 +170,7 @@ if (platform == 'windows') {
 		// Uncomment the following line if you want the script to exit on failure
 		// process.exit(1);
 	}
+
 
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
@@ -271,11 +276,18 @@ if (platform == 'macos') {
 				console.error("No suitable arm64 screenpipe binary found");
 			}
 			// if the binary exists, hard code the fucking dylib
-			if (await fs.exists('screenpipe-aarch64-apple-darwin')) {
+			if (await fs.exists('screenpipe-aarch64-apple-darwin') && !isDevMode) {
 				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @rpath/../Frameworks/libscreenpipe_arm64.dylib ./screenpipe-aarch64-apple-darwin`
 				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-aarch64-apple-darwin`
 				console.log(`hard coded the FUCKING dylib`);
+			} else if (await fs.exists('screenpipe-aarch64-apple-darwin') && isDevMode) {
+				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @executable_path/../Frameworks/libscreenpipe_arm64.dylib ./screenpipe-aarch64-apple-darwin`
+				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @executable_path/../Frameworks/libscreenpipe.dylib ./screenpipe-aarch64-apple-darwin`
+				await $`install_name_tool -add_rpath @executable_path/../Frameworks ./screenpipe-aarch64-apple-darwin`
+				console.log(`Updated dylib paths for arm64 in dev mode`);
 			}
+
+
 		} else if (arch === 'x86_64') {
 			// copy screenpipe binary (more recent one)
 			const paths = [
@@ -292,11 +304,12 @@ if (platform == 'macos') {
 				console.error("No suitable x86_64 screenpipe binary found");
 			}
 			// hard code the fucking dylib
-			if (await fs.exists('screenpipe-x86_64-apple-darwin')) {
+			if (await fs.exists('screenpipe-x86_64-apple-darwin') && !isDevMode) {
 				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_x86_64.dylib @rpath/../Frameworks/libscreenpipe_x86_64.dylib ./screenpipe-x86_64-apple-darwin`
 				await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-x86_64-apple-darwin`
 				console.log(`hard coded the FUCKING dylib`);
 			}
+
 		}
 
 		console.log(`screenpipe for ${arch} set up successfully.`);
@@ -309,7 +322,20 @@ if (platform == 'macos') {
 		await $`tar xf ${config.macos.ffmpegName}.tar.xz`
 		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm ${config.macos.ffmpegName}.tar.xz`
+	} else {
+		console.log('FFMPEG already exists');
 	}
+
+	// Move and rename ffmpeg and ffprobe binaries
+	const ffmpegSrc = path.join(cwd, config.ffmpegRealname, 'bin', 'ffmpeg');
+
+	// For x86_64
+	await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-x86_64-apple-darwin'));
+
+	// For arm64
+	await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-aarch64-apple-darwin'));
+
+	console.log('Moved and renamed ffmpeg binary for externalBin');
 }
 
 // Nvidia

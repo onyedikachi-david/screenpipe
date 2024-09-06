@@ -1,21 +1,20 @@
 class Screenpipe < Formula
   desc "Library to build personalized AI powered by what you've seen, said, or heard."
   homepage "https://github.com/mediar-ai/screenpipe"
-  url "https://github.com/mediar-ai/screenpipe/releases/download/v0.1.68/screenpipe-0.1.68-aarch64-apple-darwin.tar.gz"
-  version "0.1.68"
+  url "https://github.com/mediar-ai/screenpipe/releases/download/v0.1.78/screenpipe-0.1.78-aarch64-apple-darwin.tar.gz"
+  version "0.1.78"
 
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/mediar-ai/screenpipe/releases/download/v#{version}/screenpipe-#{version}-aarch64-apple-darwin.tar.gz"
-      sha256 "d0af79154f84b273ddbe7ebe408c188b23360642b21da9865a5a72555aaccc9e" # arm64
+      sha256 "0adf737c627524d3a5f7c1f726103ef143e7ba0c65fe610ac8f9ba8442ed7937" # arm64
     else
       url "https://github.com/mediar-ai/screenpipe/releases/download/v#{version}/screenpipe-#{version}-x86_64-apple-darwin.tar.gz"
-      sha256 "1298983fb430a4b6b6d0482bf9f6124d0c38a8cffd54f1eb8e143a564b2bad34" # x86_64
+      sha256 "68db5c35ebf77a62bdb75cad79029141be948f56cdbe36abb79e92351b36d622" # x86_64
     end
   end
   
   depends_on "ffmpeg"
-  depends_on "tesseract"
 
   def install
     bin.install Dir["bin/*"]
@@ -38,7 +37,7 @@ end
 
 # aarch64-apple-darwin
 =begin
-cargo build --release --features metal --target aarch64-apple-darwin
+cargo build --release --features metal,pipes --target aarch64-apple-darwin
 tar -czf screenpipe-${VERSION}-aarch64-apple-darwin.tar.gz -C target/release screenpipe
 shasum -a 256 screenpipe-${VERSION}-aarch64-apple-darwin.tar.gz
 gh release upload v${VERSION} screenpipe-${VERSION}-aarch64-apple-darwin.tar.gz
@@ -49,7 +48,7 @@ rm screenpipe-${VERSION}-aarch64-apple-darwin.tar.gz
 =begin
 export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
 export PKG_CONFIG_ALLOW_CROSS=1
-cargo build --release --features metal --target x86_64-apple-darwin
+cargo build --release --features metal,pipes --target x86_64-apple-darwin
 tar -czf screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz -C target/release screenpipe
 shasum -a 256 screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz
 gh release upload v${VERSION} screenpipe-${VERSION}-x86_64-apple-darwin.tar.gz

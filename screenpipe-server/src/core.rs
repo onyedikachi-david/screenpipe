@@ -32,8 +32,9 @@ pub async fn start_continuous_recording(
     friend_wearable_uid: Option<String>,
     monitor_id: u32,
     use_pii_removal: bool,
+    vision_disabled: bool,
 ) -> Result<()> {
-    let (whisper_sender, whisper_receiver) = if audio_disabled {
+    let (whisper_sender, whisper_receiver, whisper_shutdown_flag) = if audio_disabled {
         // Create a dummy channel if no audio devices are available, e.g. audio disabled
         let (input_sender, _): (UnboundedSender<AudioInput>, UnboundedReceiver<AudioInput>) =
             unbounded_channel();
@@ -41,10 +42,15 @@ pub async fn start_continuous_recording(
             UnboundedSender<TranscriptionResult>,
             UnboundedReceiver<TranscriptionResult>,
         ) = unbounded_channel();
-        (input_sender, output_receiver)
+        (
+            input_sender,
+            output_receiver,
+            Arc::new(AtomicBool::new(false)),
+        )
     } else {
         create_whisper_channel(audio_transcription_engine.clone()).await?
     };
+    let whisper_sender_clone = whisper_sender.clone();
     let db_manager_video = Arc::clone(&db);
     let db_manager_audio = Arc::clone(&db);
 
@@ -63,44 +69,67 @@ pub async fn start_continuous_recording(
         ));
     }
 
-    let video_handle = tokio::spawn(async move {
-        record_video(
-            db_manager_video,
-            output_path_video,
-            fps,
-            is_running_video,
-            save_text_files,
-            ocr_engine,
-            friend_wearable_uid_video,
-            monitor_id,
-            use_pii_removal,
-        )
-        .await
-    });
+    let video_handle = if !vision_disabled {
+        tokio::spawn(async move {
+            record_video(
+                db_manager_video,
+                output_path_video,
+                fps,
+                is_running_video,
+                save_text_files,
+                ocr_engine,
+                friend_wearable_uid_video,
+                monitor_id,
+                use_pii_removal,
+            )
+            .await
+        })
+    } else {
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            Ok(())
+        })
+    };
 
-    let audio_handle = tokio::spawn(async move {
-        record_audio(
-            db_manager_audio,
-            output_path_audio,
-            audio_chunk_duration,
-            whisper_sender,
-            whisper_receiver,
-            audio_devices_control,
-            friend_wearable_uid,
-            audio_transcription_engine,
-        )
-        .await
-    });
+    let audio_handle = if !audio_disabled {
+        tokio::spawn(async move {
+            record_audio(
+                db_manager_audio,
+                output_path_audio,
+                audio_chunk_duration,
+                whisper_sender,
+                whisper_receiver,
+                audio_devices_control,
+                friend_wearable_uid,
+                audio_transcription_engine,
+            )
+            .await
+        })
+    } else {
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            Ok(())
+        })
+    };
 
-    let video_result = video_handle.await;
-    let audio_result = audio_handle.await;
+    // Wait for both tasks to complete
+    let (video_result, audio_result) = tokio::join!(video_handle, audio_handle);
 
+    // Handle any errors from the tasks
     if let Err(e) = video_result {
         error!("Video recording error: {:?}", e);
     }
     if let Err(e) = audio_result {
         error!("Audio recording error: {:?}", e);
     }
+
+    // Shutdown the whisper channel
+    whisper_shutdown_flag.store(true, Ordering::Relaxed);
+    drop(whisper_sender_clone); // Close the sender channel
+
+    // TODO: process any remaining audio chunks
+    // TODO: wait a bit for whisper to finish processing
+    // TODO: any additional cleanup like device controls to release
 
     info!("Stopped recording");
     Ok(())
@@ -241,8 +270,10 @@ async fn record_audio(
                     let device_control_clone = device_control_clone.clone();
 
                     let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+                    let sanitized_device_name =
+                        audio_device_clone.to_string().replace(['/', '\\'], "_");
                     let file_path = PathBuf::from(&*output_path_clone)
-                        .join(format!("{}_{}.mp4", audio_device_clone, new_file_name))
+                        .join(format!("{}_{}.mp4", sanitized_device_name, new_file_name))
                         .to_str()
                         .expect("Failed to create valid path")
                         .to_string();

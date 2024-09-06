@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "0.1.67"
+version = "0.1.87"
 description = ""
 authors = ["you"]
 license = ""
@@ -12,26 +12,18 @@ rust-version = "1.60"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]
-tauri-build = { version = "=2.0.0-rc.3", features = [] }
+tauri-build = { version = "=2.0.0-rc.9", features = [] }
 
 [dependencies]
 serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-tauri = { version = "2.0.0-rc.0", features = ["tray-icon", "devtools", "image-png", "image-ico"] }
+tauri = { version = "2.0.0-rc.10", features = ["tray-icon", "devtools", "image-png", "image-ico"] }
 
-screenpipe-vision = { git = "https://github.com/mediar-ai/screenpipe", branch = "main" }
-
-axum = "0.7.5"
 
 # Logging
 log = "0.4.17"
-env_logger = "0.11.3"
 
 # Tokio
 tokio = { version = "1.36.0", features = ["full"] }
-
-# Directory management
-dirs = "5.0"
 
 # HTTP client
 reqwest = { version = "0.12", features = ["json"] }
@@ -51,19 +43,22 @@ tracing-appender = "0.2.3"
 tauri-plugin-autostart = "2.0.0-beta.9"
 
 # Chrono
-chrono = "0.4.3"
 tauri-plugin-shell = "2.0.0-rc.2"
 tauri-plugin-store = "2.0.0-beta"
 
 
 anyhow = "1.0.71"
-which = "6.0.1"
 
 # System information
 sysinfo = "0.29.0"
 
 # hakc 
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
+
+# server
+axum = "0.6"
+serde = "1.0.160"
+
 
 tauri-plugin-fs = "2.0.0-beta"
 tauri-plugin-notification = "2.0.0-alpha.3"

@@ -21,6 +21,7 @@ import UpdateNotification from "@/components/update-notification";
 import { usePostHog } from "posthog-js/react";
 import Link from "next/link";
 import { useToast } from "@/components/ui/use-toast";
+import { DevSettings } from "@/components/dev-dialog";
 
 export default function Home() {
   const { settings } = useSettings();

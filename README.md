@@ -16,7 +16,12 @@
     <a href="https://screenpi.pe" target="_blank">
         <img src="https://img.shields.io/badge/Download%20The-Desktop%20App-blue?style=for-the-badge" alt="Download the Desktop App">
     </a>
-    
+</p>
+
+<p align="center">
+    <a href="https://www.youtube.com/@mediar_ai" target="_blank">
+        <img src="https://img.shields.io/endpoint?style=for-the-badge&url=https%3A%2F%2Fyoutube-channel-badge.ngoldack.vercel.app%2Fapi%2Fsubscriber" alt="Subs">
+    </a>
 </p>
 
 
@@ -43,6 +48,7 @@
 ---
 
 *Latest News* 🔥
+- [2024/08] Anyone can now [create, share, install pipes](https://youtu.be/iCqHgZgQHyA?si=DjKJir7HfZoQKItK) (plugins) from the app interface based on a github repo/dir
 - [2024/08] We're running bounties! Contribute to screenpipe & make money, [check issues](https://github.com/mediar-ai/screenpipe/issues)
 - [2024/08] Audio input & output now works perfect on Windows, Linux, MacOS (<15.0). We also support multi monitor capture and defaulting STT to Whisper Distil large v3
 - [2024/08] We released video embedding. AI gives you links to your video recording in the chat!
@@ -181,8 +187,47 @@ Then run it
 
 <details>
   <summary>Windows</summary>
+
+
+> [!note]
+> This is experimental support for Windows build. This assumes you already have the CUDA Toolkit installed and the CUDA_PATH set to my CUDA v12.6 folder.
+> Replace `V:\projects` and `V:\packages` with your own folders.
+
+- Install chocolatey
+- Install git
+- Install CUDA Toolkit (if using NVIDIA and building with cuda)
+- Install MS Visual Studio Build Tools (below are the components I have installed)
+	- Desktop development with C++
+		- MSVC v143
+		- Windows 11 SDK
+		- C++ Cmake tools for Windows
+		- Testing tools core features - Build tools
+		- C++ AddressSanitizer
+		- C++ ATL for latest v143
+	- Individual components
+		- C++ ATL for latest v143 build tools (x86 & x64)
+		- MSBuild support for LLVM (clang-c) toolset
+		- C++ Clang Compiler for Windows
+
+```batch
+choco install pkgconfiglite rust
+cd V:\projects
+git clone https://github.com/louis030195/screen-pipe
+cd V:\packages
+git clone https://github.com/microsoft/vcpkg.git
+cd vcpkg
+bootstrap-vcpkg.bat -disableMetrics
+vcpkg.exe integrate install --disable-metrics
+vcpkg.exe install ffmpeg
+
+SET PKG_CONFIG_PATH=V:\packages\vcpkg\packages\ffmpeg_x64-windows\lib\pkgconfig
+SET VCPKG_ROOT=V:\packages\vcpkg
+SET LIBCLANG_PATH=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin
+cd V:\projects\screen-pipe
+
+cargo build --release --features cuda
+```
    
-   Currently updating the instructions for Windows which are not straightforward, please feel free to help
 </details>
 
 <details>
@@ -457,7 +502,7 @@ Alpha: runs on my computer `Macbook pro m3 32 GB ram` and a $400 Windows laptop,
     - [ ] Camera
     - [ ] Keyboard
     - [x] Browser
-    - [ ] Pipe Store (a list of "pipes" you can build, share & easily install to get more value out of your screen & mic data without effort). It runs in Deno Typescript engine within screenpipe on your computer
+    - [x] Pipe Store (a list of "pipes" you can build, share & easily install to get more value out of your screen & mic data without effort). It runs in Deno Typescript engine within screenpipe on your computer
 - [x] screenshots + OCR with different engines to optimise privacy, quality, or energy consumption
   - [x] tesseract
   - [x] Windows native OCR
@@ -465,10 +510,8 @@ Alpha: runs on my computer `Macbook pro m3 32 GB ram` and a $400 Windows laptop,
   - [x] unstructured.io
   - [ ] screenpipe screen/audio specialised LLM
 - [x] audio + STT (works with multi input devices, like your iPhone + mac mic, many STT engines)
-  - [x] Linux, MacOS, Windows input
-  - [x] Linux output
-  - [x] MacOS output 
-  - [ ] Windows output (shipping on 19 august)
+  - [x] Linux, MacOS, Windows input & output devices
+  - [x] iPhone microphone
 - [x] [remote capture](https://github.com/mediar-ai/screenpipe/discussions/68) (run screenpipe on your cloud and it capture your local machine, only tested on Linux) for example when you have low compute laptop
 - [x] optimised screen & audio recording (mp4 encoding, estimating 30 gb/m with default settings)
 - [x] sqlite local db
@@ -479,12 +522,11 @@ Alpha: runs on my computer `Macbook pro m3 32 GB ram` and a $400 Windows laptop,
 - [ ] multimodal embeddings
 - [ ] cloud storage options (s3, pgsql, etc.)
 - [x] cloud computing options (deepgram for audio, unstructured for OCR)
-- [ ] bug-free & stable
 - [x] custom storage settings: customizable capture settings (fps, resolution)
 - [ ] security
   - [x] window specific capture (e.g. can decide to only capture specific tab of cursor, chrome, obsidian, or only specific app)
   - [ ] encryption
-  - [ ] PII removal
+  - [x] PII removal
 - [ ] fast, optimised, energy-efficient modes
 - [ ] webhooks/events (for automations)
 - [ ] abstractions for multiplayer usage (e.g. aggregate sales team data, company team data, partner, etc.)

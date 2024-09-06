@@ -8,11 +8,10 @@ use std::fs::{self, File};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 use xcap::Monitor;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 pub enum OcrEngine {
     Unstructured,
     Tesseract,
@@ -51,7 +50,7 @@ pub fn compare_images_ssim(image1: &DynamicImage, image2: &DynamicImage) -> f64 
 }
 
 pub async fn capture_screenshot(
-    monitor: Arc<Monitor>,
+    monitor: &Monitor,
 ) -> Result<
     (
         DynamicImage,
@@ -76,9 +75,12 @@ pub async fn capture_screenshot(
         Ok(images) => {
             // info!("Successfully captured {} window images", images.len());
             images
-        },
+        }
         Err(e) => {
-            warn!("Failed to capture window images: {}. Continuing with empty result.", e);
+            warn!(
+                "Failed to capture window images: {}. Continuing with empty result.",
+                e
+            );
             Vec::new()
         }
     };
@@ -87,7 +89,7 @@ pub async fn capture_screenshot(
 }
 
 pub async fn compare_with_previous_image(
-    previous_image: &Option<Arc<DynamicImage>>,
+    previous_image: Option<&DynamicImage>,
     current_image: &DynamicImage,
     max_average: &mut Option<MaxAverageFrame>,
     frame_number: u64,
@@ -178,4 +180,3 @@ pub async fn save_text_files(
         }
     }
 }
-
