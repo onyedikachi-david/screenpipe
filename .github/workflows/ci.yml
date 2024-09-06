@@ -188,12 +188,13 @@ jobs:
           sleep 5
           pulseaudio --start
           sleep 2
-          pacmd load-module module-null-sink sink_name=virtual_speaker
-          pacmd set-default-sink virtual_speaker
-          pacmd load-module module-virtual-source source_name=virtual_mic master=virtual_speaker.monitor
-          pacmd set-default-source virtual_mic
+          pactl load-module module-null-sink sink_name=virtual_speaker
+          pactl set-default-sink virtual_speaker
+          pactl load-module module-virtual-source source_name=virtual_mic master=virtual_speaker.monitor
+          pactl set-default-source virtual_mic
           sleep 5
 
+          chmod +x ./screenpipe
           chmod +x ./scripts/simulate_screen_activity.sh
           chmod +x ./scripts/simulate_audio_activity.sh
           ./scripts/simulate_screen_activity.sh &
