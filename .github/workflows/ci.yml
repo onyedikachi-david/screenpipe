@@ -167,7 +167,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60 # Increase timeout to 60 minutes
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v3
       - uses: actions/download-artifact@v3
@@ -175,15 +175,11 @@ jobs:
           name: screenpipe-${{ matrix.os }}
           path: .
 
-      - name: Install dependencies (Ubuntu)
+      - name: Setup and run CLI (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb openbox pulseaudio pavucontrol xdotool x11-xserver-utils sox
-
-      - name: Set up virtual display and audio (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
+          sudo apt-get install -y xvfb pulseaudio ffmpeg imagemagick xdotool x11-xserver-utils xterm openbox alsa-utils sox
           Xvfb :99 -ac -screen 0 1024x768x24 &
           export DISPLAY=:99
           echo "DISPLAY=:99" >> $GITHUB_ENV
@@ -191,91 +187,58 @@ jobs:
           openbox &
           sleep 5
           pulseaudio --start
-          pactl load-module module-null-sink sink_name=virtual_speaker
-          pactl set-default-sink virtual_speaker
-          pactl load-module module-virtual-source source_name=virtual_mic master=virtual_speaker.monitor
-          pactl set-default-source virtual_mic
-          sleep 5
-          xwininfo -root -tree || true
-          chmod +x ./scripts/launch_test_window.sh
-          ./scripts/launch_test_window.sh &
+          sleep 2
+          pacmd load-module module-null-sink sink_name=virtual_speaker
+          pacmd set-default-sink virtual_speaker
+          pacmd load-module module-virtual-source source_name=virtual_mic master=virtual_speaker.monitor
+          pacmd set-default-source virtual_mic
           sleep 5
 
-      - name: Simulate screen and audio activity (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
           chmod +x ./scripts/simulate_screen_activity.sh
           chmod +x ./scripts/simulate_audio_activity.sh
-          DISPLAY=:99 ./scripts/simulate_screen_activity.sh &
+          ./scripts/simulate_screen_activity.sh &
           ./scripts/simulate_audio_activity.sh &
 
-      - name: Run CLI and check health (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          export DISPLAY=:99
-          echo "DISPLAY=$DISPLAY"
-          xdpyinfo || true
-          DISPLAY=:99 RUST_LOG=debug ./screenpipe --data-dir ./test_data --fps 1 > screenpipe_output.log 2>&1 &
+          mkdir -p ./test_data/logs
+          RUST_LOG=debug ./screenpipe --data-dir ./test_data --fps 1 &
           CLI_PID=$!
-          sleep 10  # Give CLI some time to start up
-          for i in {1..24}; do
-            sleep 10
-            if ! ps -p $CLI_PID > /dev/null; then
-              echo "CLI process has died"
-              cat screenpipe_output.log
-              exit 1
-            fi
+          sleep 10
+
+          for i in {1..30}; do
             response=$(curl -s http://localhost:3030/health)
-            echo "$response"
-            status=$(echo "$response" | jq -r '.status')
-            frame_status=$(echo "$response" | jq -r '.frame_status')
-            audio_status=$(echo "$response" | jq -r '.audio_status')
+            echo "Health check $i: $response"
+            status=$(echo $response | jq -r '.status')
+            frame_status=$(echo $response | jq -r '.frame_status')
+            audio_status=$(echo $response | jq -r '.audio_status')
             if [[ "$status" == "Healthy" && "$frame_status" == "OK" && "$audio_status" == "OK" ]]; then
               echo "Health check passed"
               exit 0
             fi
-            # Debug information
-            echo "Iteration $i: Current window list"
-            DISPLAY=:99 xwininfo -root -children
-            echo "Current processes:"
-            ps aux | grep -E 'Xvfb|xterm|screenpipe|simulate|openbox'
-            echo "Screenshot exists:"
-            ls -l /tmp/screenshot.png
-            echo "Screenshot content:"
-            file /tmp/screenshot.png
-            echo "X11 environment variables:"
-            env | grep -E 'DISPLAY|XAUTHORITY'
-            echo "X11 server check:"
-            xdpyinfo | head -n 5
-            echo "Audio devices:"
-            aplay -l
-            echo "PulseAudio status:"
-            pactl info
-            echo "Screenpipe log tail:"
-            tail -n 50 ./test_data/logs/screenpipe.log
+            sleep 10
           done
-          echo "Health check failed after 4 minutes"
-          echo "Xvfb log:"
-          cat /var/log/Xvfb.0.log
-          echo "screenpipe log:"
+
+          echo "Health check failed after 5 minutes"
           cat ./test_data/logs/screenpipe.log
           exit 1
 
-      - name: Run CLI and check health (Windows)
+      - name: Setup and run CLI (Windows)
         if: matrix.os == 'windows-latest'
         run: |
           $env:RUST_LOG = "debug"
-          Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data" -NoNewWindow -PassThru -RedirectStandardOutput screenpipe_output.log -RedirectStandardError screenpipe_error.log
-          Start-Sleep -Seconds 10  # Give CLI some time to start up
+          New-Item -ItemType Directory -Force -Path .\test_data\logs
+
           Start-Process -FilePath powershell -ArgumentList "-File", ".\scripts\simulate_screen_activity.ps1" -NoNewWindow
           Start-Process -FilePath powershell -ArgumentList "-File", ".\scripts\simulate_audio_activity.ps1" -NoNewWindow
-          $attempts = 24
+
+          Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1" -NoNewWindow -PassThru
+
+          $attempts = 30
           $interval = 10
           for ($i = 0; $i -lt $attempts; $i++) {
             Start-Sleep -Seconds $interval
             try {
-              $response = Invoke-RestMethod -Uri http://localhost:3030/health
-              $response | ConvertTo-Json
+              $response = Invoke-RestMethod -Uri http://localhost:3030/health -ErrorAction Stop
+              Write-Output "Health check $($i+1): $($response | ConvertTo-Json -Compress)"
               if ($response.status -eq "Healthy" -and $response.frame_status -eq "OK" -and $response.audio_status -eq "OK") {
                 Write-Output "Health check passed"
                 exit 0
@@ -283,13 +246,8 @@ jobs:
             } catch {
               Write-Output "Error occurred while checking health: $_"
             }
-            Write-Output "Current processes:"
-            Get-Process | Where-Object { $_.Name -match 'screenpipe|powershell' } | Format-Table -AutoSize
-            Write-Output "Screenpipe log tail:"
-            Get-Content .\test_data\logs\screenpipe.log -Tail 50
           }
-          Write-Error "Health check failed after 4 minutes"
-          Get-Content screenpipe_output.log
-          Get-Content screenpipe_error.log
+
+          Write-Error "Health check failed after 5 minutes"
           Get-Content .\test_data\logs\screenpipe.log
           exit 1
