@@ -164,23 +164,21 @@ jobs:
           openbox &
           sleep 5
           pulseaudio --start
-          pactl load-module module-null-sink sink_name=virtual_speaker
-          pactl set-default-sink virtual_speaker
-          pactl load-module module-virtual-source source_name=virtual_mic master=virtual_speaker.monitor
-          pactl set-default-source virtual_mic
+          sleep 2
+          pacmd load-module module-null-sink sink_name=virtual_speaker
+          pacmd set-default-sink virtual_speaker
+          pacmd load-module module-virtual-source source_name=virtual_mic master=virtual_speaker.monitor
+          pacmd set-default-source virtual_mic
           sleep 5
           xwininfo -root -tree || true
           chmod +x ./scripts/launch_test_window.sh
           ./scripts/launch_test_window.sh &
           sleep 5
-
-      - name: Simulate screen and audio activity (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          chmod +x ./scripts/simulate_screen_activity.sh
-          chmod +x ./scripts/simulate_audio_activity.sh
-          DISPLAY=:99 ./scripts/simulate_screen_activity.sh &
-          ./scripts/simulate_audio_activity.sh &
+          # Debug audio setup
+          pacmd list-sinks
+          pacmd list-sources
+          pactl list short sinks
+          pactl list short sources
 
       - name: Run CLI and check health (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
@@ -188,6 +186,7 @@ jobs:
           export DISPLAY=:99
           echo "DISPLAY=$DISPLAY"
           xdpyinfo || true
+          mkdir -p ./test_data/logs
           DISPLAY=:99 RUST_LOG=debug ./target/release/screenpipe --data-dir ./test_data --fps 1 > screenpipe_output.log 2>&1 &
           CLI_PID=$!
           sleep 10  # Give CLI some time to start up
@@ -232,6 +231,8 @@ jobs:
           cat /var/log/Xvfb.0.log
           echo "screenpipe log:"
           cat ./test_data/logs/screenpipe.log
+          echo "screenpipe output log:"
+          cat screenpipe_output.log
           exit 1
 
       - name: Run CLI and check health (Windows)
