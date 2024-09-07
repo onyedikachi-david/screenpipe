@@ -161,29 +161,24 @@ jobs:
           name: screenpipe-${{ matrix.os }}
           path: target/release/screenpipe*
 
-  test-cli:
+  test-cli-ubuntu:
     needs: build-cli
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@v3
       - uses: actions/download-artifact@v3
         with:
-          name: screenpipe-${{ matrix.os }}
+          name: screenpipe-ubuntu-latest
           path: .
 
       - name: Install dependencies (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
         timeout-minutes: 30
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb pulseaudio ffmpeg imagemagick xdotool x11-xserver-utils xterm openbox alsa-utils sox tesseract-ocr libtesseract-dev
 
       - name: Setup display and window manager (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
         timeout-minutes: 30
         run: |
           # Start Xvfb
@@ -201,7 +196,6 @@ jobs:
           sleep 5
 
       - name: Setup audio (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
         timeout-minutes: 30
         run: |
           # Setup audio
@@ -214,7 +208,6 @@ jobs:
           sleep 5
 
       - name: Debug information (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
         timeout-minutes: 30
         run: |
           echo "Window list:"
@@ -228,7 +221,6 @@ jobs:
           pactl list short sources
 
       - name: Start simulations (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
         timeout-minutes: 30
         run: |
           # Start screen and audio simulation
@@ -238,7 +230,6 @@ jobs:
           ./scripts/simulate_audio_activity.sh &
 
       - name: Run screenpipe and health checks (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
         timeout-minutes: 30
         run: |
           # Run screenpipe
@@ -293,14 +284,22 @@ jobs:
           netstat -tuln | grep 3030
           exit 1
 
-      - name: Setup and run CLI (Windows)
-        if: matrix.os == 'windows-latest'
-        timeout-minutes: 30
-        run: |
-          # Install FFmpeg
-          choco install ffmpeg -y
-          $env:Path += ";C:\ProgramData\chocolatey\bin"
+  test-cli-windows:
+    needs: [build-cli, test-cli-ubuntu]
+    runs-on: windows-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
+        with:
+          name: screenpipe-windows-latest
+          path: .
 
+      - name: Install FFmpeg
+        run: choco install ffmpeg -y
+
+      - name: Setup and run CLI (Windows)
+        run: |
           # Set up environment
           $env:RUST_LOG = "debug"
           $env:RUST_BACKTRACE = "1"
