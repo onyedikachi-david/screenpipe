@@ -341,15 +341,19 @@ jobs:
           }
 
           # Start screenpipe and capture its process ID
-          $screenpipeProcess = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1", "--verbose" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
+          $screenpipeProcess = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
           $screenpipePID = $screenpipeProcess.Id
           Write-Output "Screenpipe started with PID: $screenpipePID"
 
           # Wait for process to exit or timeout
           $timeout = 60
-          if (Wait-Process -Id $screenpipePID -Timeout $timeout -ErrorAction SilentlyContinue) {
-            Write-Error "Screenpipe process has exited unexpectedly"
-          } else {
+          try {
+            if (Wait-Process -Id $screenpipePID -Timeout $timeout -ErrorAction Stop) {
+              Write-Error "Screenpipe process has exited unexpectedly"
+            } else {
+              Write-Output "Screenpipe process is still running after $timeout seconds"
+            }
+          } catch {
             Write-Output "Screenpipe process is still running after $timeout seconds"
           }
 
