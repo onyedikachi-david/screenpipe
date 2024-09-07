@@ -167,7 +167,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    timeout-minutes: 90 # Increased timeout
+
     steps:
       - uses: actions/checkout@v3
       - uses: actions/download-artifact@v3
@@ -175,12 +176,15 @@ jobs:
           name: screenpipe-${{ matrix.os }}
           path: .
 
-      - name: Setup and run CLI (Ubuntu)
+      - name: Install dependencies (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb pulseaudio ffmpeg imagemagick xdotool x11-xserver-utils xterm openbox alsa-utils sox tesseract-ocr libtesseract-dev
 
+      - name: Setup display and window manager (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
           # Start Xvfb
           Xvfb :99 -ac -screen 0 1024x768x24 &
           export DISPLAY=:99
@@ -195,6 +199,9 @@ jobs:
           xterm -e "echo 'Test Window'; while true; do date; sleep 1; done" &
           sleep 5
 
+      - name: Setup audio (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
           # Setup audio
           pulseaudio --start
           sleep 2
@@ -204,7 +211,9 @@ jobs:
           pactl set-default-source virtual_mic
           sleep 5
 
-          # Debug information
+      - name: Debug information (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
           echo "Window list:"
           xwininfo -root -tree
 
@@ -215,12 +224,18 @@ jobs:
           pactl list short sinks
           pactl list short sources
 
+      - name: Start simulations (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
           # Start screen and audio simulation
           chmod +x ./scripts/simulate_screen_activity.sh
           chmod +x ./scripts/simulate_audio_activity.sh
           ./scripts/simulate_screen_activity.sh &
           ./scripts/simulate_audio_activity.sh &
 
+      - name: Run screenpipe and health checks (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
           # Run screenpipe
           chmod +x ./screenpipe
           mkdir -p ./test_data/logs
