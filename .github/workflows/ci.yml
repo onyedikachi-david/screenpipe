@@ -240,7 +240,7 @@ jobs:
           echo "Screenpipe PID: $CLI_PID"
 
           # Wait longer for initialization
-          sleep 30
+          sleep 60
 
           # Check if screenpipe is still running
           if ! ps -p $CLI_PID > /dev/null; then
@@ -296,12 +296,15 @@ jobs:
           path: .
 
       - name: Install FFmpeg
-        run: choco install ffmpeg -y
+        run: |
+          choco install ffmpeg -y
+          refreshenv
 
       - name: Setup and run CLI (Windows)
+        shell: pwsh
         run: |
           # Set up environment
-          $env:RUST_LOG = "debug"
+          $env:RUST_LOG = "debug,screenpipe=trace"
           $env:RUST_BACKTRACE = "1"
           New-Item -ItemType Directory -Force -Path .\test_data\logs
 
@@ -310,8 +313,8 @@ jobs:
           $screenpipePID = $screenpipeProcess.Id
           Write-Output "Screenpipe started with PID: $screenpipePID"
 
-          # Wait for screenpipe to start
-          Start-Sleep -Seconds 20
+          # Wait longer for screenpipe to start
+          Start-Sleep -Seconds 60
 
           # Check if screenpipe is still running
           $runningProcess = Get-Process -Id $screenpipePID -ErrorAction SilentlyContinue
@@ -361,3 +364,10 @@ jobs:
           Write-Output "Network connections:"
           netstat -ano | Select-String "3030"
           exit 1
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-test-logs
+          path: .\test_data\logs\*
