@@ -239,9 +239,19 @@ jobs:
           # Run screenpipe
           chmod +x ./screenpipe
           mkdir -p ./test_data/logs
-          RUST_LOG=debug RUST_BACKTRACE=1 ./screenpipe --data-dir ./test_data --fps 1 &
+          RUST_LOG=debug,screenpipe=trace RUST_BACKTRACE=1 ./screenpipe --data-dir ./test_data --fps 1 > ./test_data/logs/screenpipe.log 2>&1 &
           CLI_PID=$!
-          sleep 10
+          echo "Screenpipe PID: $CLI_PID"
+
+          # Wait longer for initialization
+          sleep 30
+
+          # Check if screenpipe is still running
+          if ! ps -p $CLI_PID > /dev/null; then
+            echo "Screenpipe process has died"
+            cat ./test_data/logs/screenpipe.log
+            exit 1
+          fi
 
           # Health checks
           for i in {1..30}; do
@@ -254,6 +264,13 @@ jobs:
               echo "Health check passed"
               exit 0
             fi
+            
+            # Check if screenpipe is still running
+            if ! ps -p $CLI_PID > /dev/null; then
+              echo "Screenpipe process has died during health checks"
+              break
+            fi
+            
             sleep 10
           done
 
@@ -264,6 +281,11 @@ jobs:
           cat /tmp/.X99-lock
           echo "Process list:"
           ps aux | grep -E 'Xvfb|pulseaudio|openbox|xterm|screenpipe'
+          echo "Audio devices:"
+          pactl list short sinks
+          pactl list short sources
+          echo "Network connections:"
+          netstat -tuln | grep 3030
           exit 1
 
       - name: Setup and run CLI (Windows)
