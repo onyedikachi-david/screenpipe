@@ -167,8 +167,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 360 # Increased timeout
-
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v3
       - uses: actions/download-artifact@v3
@@ -178,12 +177,14 @@ jobs:
 
       - name: Install dependencies (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
+        timeout-minutes: 30
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb pulseaudio ffmpeg imagemagick xdotool x11-xserver-utils xterm openbox alsa-utils sox tesseract-ocr libtesseract-dev
 
       - name: Setup display and window manager (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
+        timeout-minutes: 30
         run: |
           # Start Xvfb
           Xvfb :99 -ac -screen 0 1024x768x24 &
@@ -201,6 +202,7 @@ jobs:
 
       - name: Setup audio (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
+        timeout-minutes: 30
         run: |
           # Setup audio
           pulseaudio --start
@@ -213,6 +215,7 @@ jobs:
 
       - name: Debug information (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
+        timeout-minutes: 30
         run: |
           echo "Window list:"
           xwininfo -root -tree
@@ -226,6 +229,7 @@ jobs:
 
       - name: Start simulations (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
+        timeout-minutes: 30
         run: |
           # Start screen and audio simulation
           chmod +x ./scripts/simulate_screen_activity.sh
@@ -235,6 +239,7 @@ jobs:
 
       - name: Run screenpipe and health checks (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
+        timeout-minutes: 30
         run: |
           # Run screenpipe
           chmod +x ./screenpipe
@@ -290,6 +295,7 @@ jobs:
 
       - name: Setup and run CLI (Windows)
         if: matrix.os == 'windows-latest'
+        timeout-minutes: 30
         run: |
           # Install FFmpeg
           choco install ffmpeg -y
