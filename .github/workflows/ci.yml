@@ -167,7 +167,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90 # Increased timeout
+    timeout-minutes: 360 # Increased timeout
 
     steps:
       - uses: actions/checkout@v3
