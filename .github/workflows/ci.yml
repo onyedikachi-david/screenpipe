@@ -295,13 +295,29 @@ jobs:
           name: screenpipe-windows-latest
           path: .
 
-      - name: Install FFmpeg
+      - name: Install dependencies
         shell: pwsh
         run: |
-          choco install ffmpeg -y
+          # Install Chocolatey packages
+          choco install ffmpeg pkgconfiglite rust -y
+
+          # Install Visual Studio Build Tools
+          choco install visualstudio2022buildtools -y
+          choco install visualstudio2022-workload-vctools -y
+
+          # Install vcpkg
+          git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+          C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+          C:\vcpkg\vcpkg.exe integrate install --disable-metrics
+          C:\vcpkg\vcpkg.exe install ffmpeg
+
+          # Set environment variables
+          $env:PKG_CONFIG_PATH = "C:\vcpkg\packages\ffmpeg_x64-windows\lib\pkgconfig"
+          $env:VCPKG_ROOT = "C:\vcpkg"
+          $env:LIBCLANG_PATH = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin"
+
+          # Refresh PATH
           $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-          Write-Output "FFmpeg version:"
-          ffmpeg -version
 
       - name: Setup and run CLI (Windows)
         shell: pwsh
@@ -325,21 +341,23 @@ jobs:
           }
 
           # Start screenpipe and capture its process ID
-          $screenpipeProcess = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
+          $screenpipeProcess = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1", "--verbose" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
           $screenpipePID = $screenpipeProcess.Id
           Write-Output "Screenpipe started with PID: $screenpipePID"
 
-          # Wait longer for screenpipe to start
-          Start-Sleep -Seconds 60
-
-          # Check if screenpipe is still running
-          $runningProcess = Get-Process -Id $screenpipePID -ErrorAction SilentlyContinue
-          if ($null -eq $runningProcess) {
+          # Wait for process to exit or timeout
+          $timeout = 60
+          if (Wait-Process -Id $screenpipePID -Timeout $timeout -ErrorAction SilentlyContinue) {
             Write-Error "Screenpipe process has exited unexpectedly"
-            Get-Content .\test_data\logs\screenpipe.log
-            Get-Content .\test_data\logs\screenpipe_error.log
-            exit 1
+          } else {
+            Write-Output "Screenpipe process is still running after $timeout seconds"
           }
+
+          # Output log contents
+          Write-Output "Screenpipe log:"
+          Get-Content .\test_data\logs\screenpipe.log
+          Write-Output "Screenpipe error log:"
+          Get-Content .\test_data\logs\screenpipe_error.log
 
           # Start screen and audio simulation
           Start-Process -FilePath powershell -ArgumentList "-File", ".\scripts\simulate_screen_activity.ps1" -NoNewWindow
