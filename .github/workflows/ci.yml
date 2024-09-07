@@ -296,9 +296,12 @@ jobs:
           path: .
 
       - name: Install FFmpeg
+        shell: pwsh
         run: |
           choco install ffmpeg -y
-          refreshenv
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+          Write-Output "FFmpeg version:"
+          ffmpeg -version
 
       - name: Setup and run CLI (Windows)
         shell: pwsh
@@ -307,6 +310,19 @@ jobs:
           $env:RUST_LOG = "debug,screenpipe=trace"
           $env:RUST_BACKTRACE = "1"
           New-Item -ItemType Directory -Force -Path .\test_data\logs
+
+          # Debug: List directory contents
+          Write-Output "Directory contents:"
+          Get-ChildItem -Recurse
+
+          # Debug: Check screenpipe.exe exists and its permissions
+          if (Test-Path .\screenpipe.exe) {
+            Write-Output "screenpipe.exe exists"
+            Get-Acl .\screenpipe.exe | Format-List
+          } else {
+            Write-Error "screenpipe.exe not found"
+            exit 1
+          }
 
           # Start screenpipe and capture its process ID
           $screenpipeProcess = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
@@ -366,7 +382,7 @@ jobs:
           exit 1
 
       - name: Upload logs
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v3
         with:
           name: windows-test-logs
