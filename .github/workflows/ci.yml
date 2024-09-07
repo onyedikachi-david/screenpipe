@@ -319,6 +319,11 @@ jobs:
           # Refresh PATH
           $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 
+      - name: List audio devices
+        shell: pwsh
+        run: |
+          Get-WmiObject Win32_SoundDevice | Select-Object Name, Status
+
       - name: Setup and run CLI (Windows)
         shell: pwsh
         run: |
@@ -341,7 +346,7 @@ jobs:
           }
 
           # Start screenpipe and capture its process ID
-          $screenpipeProcess = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
+          $screenpipeProcess = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe.log -RedirectStandardError .\test_data\logs\screenpipe_error.log -Verb RunAs
           $screenpipePID = $screenpipeProcess.Id
           Write-Output "Screenpipe started with PID: $screenpipePID"
 
