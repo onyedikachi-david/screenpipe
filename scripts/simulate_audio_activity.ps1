@@ -1,3 +1,4 @@
+# scripts/simulate_audio_activity.ps1
 Add-Type -AssemblyName System.Speech
 
 try {
@@ -8,21 +9,22 @@ try {
         Write-Output "  $($_.VoiceInfo.Name)"
     }
 
-    # Try to set the audio output to the default device
+    # Try to set the audio output to the VB-CABLE device
     try {
-        $synthesizer.SetOutputToDefaultAudioDevice()
-        Write-Output "Successfully set audio output to default device"
-    } catch {
-        Write-Output "Failed to set audio output to default device: $_"
-        # If setting to default device fails, try to use the first available device
-        $audioDevices = [System.Speech.Synthesis.SpeechSynthesizer]::InstalledVoices
-        if ($audioDevices.Count -gt 0) {
-            $synthesizer.SelectVoice($audioDevices[0].VoiceInfo.Name)
-            Write-Output "Selected voice: $($audioDevices[0].VoiceInfo.Name)"
+        $devices = [System.Speech.Synthesis.SpeechSynthesizer]::InstalledVoices
+        $vbCableDevice = $devices | Where-Object { $_.VoiceInfo.Name -like "*CABLE Output*" }
+        
+        if ($vbCableDevice) {
+            $synthesizer.SelectVoice($vbCableDevice.VoiceInfo.Name)
+            Write-Output "Selected VB-CABLE Output device: $($vbCableDevice.VoiceInfo.Name)"
         } else {
-            Write-Output "No audio devices available. Audio simulation will be skipped."
-            exit
+            Write-Output "VB-CABLE Output device not found. Using default device."
+            $synthesizer.SetOutputToDefaultAudioDevice()
         }
+    } catch {
+        Write-Output "Failed to set audio output: $_"
+        Write-Output "Using default audio device."
+        $synthesizer.SetOutputToDefaultAudioDevice()
     }
 
     while ($true) {

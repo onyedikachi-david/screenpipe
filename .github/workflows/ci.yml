@@ -319,7 +319,23 @@ jobs:
           # Refresh PATH
           $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 
-      - name: List audio devices
+      - name: Install VB-CABLE Driver
+        shell: pwsh
+        run: |
+          $url = "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip"
+          $output = "VBCABLE_Driver_Pack43.zip"
+          Invoke-WebRequest -Uri $url -OutFile $output
+          Expand-Archive -Path $output -DestinationPath "VBCABLE_Driver"
+          cd VBCABLE_Driver
+          .\VBCABLE_Setup_x64.exe -i -h
+          cd ..
+
+      - name: Verify VB-CABLE installation
+        shell: pwsh
+        run: |
+          Get-WmiObject Win32_SoundDevice | Where-Object { $_.Name -like "*CABLE Output*" } | Select-Object Name, Status
+
+      - name: List audio devices after VB-CABLE installation
         shell: pwsh
         run: |
           Get-WmiObject Win32_SoundDevice | Select-Object Name, Status
@@ -345,8 +361,8 @@ jobs:
             exit 1
           }
 
-          # Start screenpipe (removed --verbose flag)
-          $process = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe_output.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
+          # Start screenpipe with VB-CABLE device
+          $process = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1", "--audio-device", "CABLE Output (VB-Audio Virtual Cable)" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe_output.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
 
           if ($null -eq $process) {
             Write-Error "Failed to start screenpipe process"
