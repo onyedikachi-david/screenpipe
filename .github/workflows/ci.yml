@@ -345,7 +345,12 @@ jobs:
             exit 1
           }
           # Start screenpipe
-          $process = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1", "--verbose" -NoNewWindow -RedirectStandardOutput .\test_data\logs\screenpipe_output.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
+          $process = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1", "--verbose" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe_output.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
+
+          if ($process -eq $null) {
+            Write-Error "Failed to start screenpipe process"
+            exit 1
+          }
 
           Write-Output "Screenpipe process started with PID: $($process.Id)"
 
@@ -353,12 +358,12 @@ jobs:
           Start-Sleep -Seconds 60
 
           if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) {
-              Write-Output "Screenpipe process is still running"
+            Write-Output "Screenpipe process is still running"
           } else {
-              Write-Error "Screenpipe process has terminated unexpectedly"
-              Get-Content .\test_data\logs\screenpipe_output.log
-              Get-Content .\test_data\logs\screenpipe_error.log
-              exit 1
+            Write-Error "Screenpipe process has terminated unexpectedly"
+            Get-Content .\test_data\logs\screenpipe_output.log
+            Get-Content .\test_data\logs\screenpipe_error.log
+            exit 1
           }
 
           # Start screen and audio simulation
@@ -382,10 +387,10 @@ jobs:
             }
             
             if (-not (Get-Process -Id $process.Id -ErrorAction SilentlyContinue)){
-                Write-Error "Screenpipe process has terminated during health checks"
-                Get-Content .\test_data\logs\screenpipe_output.log
-                Get-Content .\test_data\logs\screenpipe_error.log
-                exit 1
+              Write-Error "Screenpipe process has terminated during health checks"
+              Get-Content .\test_data\logs\screenpipe_output.log
+              Get-Content .\test_data\logs\screenpipe_error.log
+              exit 1
             }
           }
 
