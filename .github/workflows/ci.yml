@@ -344,10 +344,11 @@ jobs:
             Write-Error "screenpipe.exe not found"
             exit 1
           }
-          # Start screenpipe
-          $process = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1", "--verbose" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe_output.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
 
-          if ($process -eq $null) {
+          # Start screenpipe (removed --verbose flag)
+          $process = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe_output.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
+
+          if ($null -eq $process) {
             Write-Error "Failed to start screenpipe process"
             exit 1
           }
@@ -386,7 +387,7 @@ jobs:
               Write-Output "Error occurred while checking health: $_"
             }
             
-            if (-not (Get-Process -Id $process.Id -ErrorAction SilentlyContinue)){
+            if (-not (Get-Process -Id $process.Id -ErrorAction SilentlyContinue)) {
               Write-Error "Screenpipe process has terminated during health checks"
               Get-Content .\test_data\logs\screenpipe_output.log
               Get-Content .\test_data\logs\screenpipe_error.log
