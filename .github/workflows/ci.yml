@@ -346,7 +346,7 @@ jobs:
           }
 
           # Start screenpipe and capture its process ID
-          $screenpipeProcess = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe.log -RedirectStandardError .\test_data\logs\screenpipe_error.log -Verb RunAs
+          $screenpipeProcess = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1"
           $screenpipePID = $screenpipeProcess.Id
           Write-Output "Screenpipe started with PID: $screenpipePID"
 
