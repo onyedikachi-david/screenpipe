@@ -345,10 +345,21 @@ jobs:
             exit 1
           }
           # Start screenpipe
-          Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1", "--verbose" -NoNewWindow -RedirectStandardOutput .\test_data\logs\screenpipe_output.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
+          $process = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1", "--verbose" -NoNewWindow -RedirectStandardOutput .\test_data\logs\screenpipe_output.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
+
+          Write-Output "Screenpipe process started with PID: $($process.Id)"
 
           # Wait longer for initialization
           Start-Sleep -Seconds 60
+
+          if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) {
+              Write-Output "Screenpipe process is still running"
+          } else {
+              Write-Error "Screenpipe process has terminated unexpectedly"
+              Get-Content .\test_data\logs\screenpipe_output.log
+              Get-Content .\test_data\logs\screenpipe_error.log
+              exit 1
+          }
 
           # Start screen and audio simulation
           Start-Process -FilePath powershell -ArgumentList "-File", ".\scripts\simulate_screen_activity.ps1" -NoNewWindow
@@ -369,10 +380,18 @@ jobs:
             } catch {
               Write-Output "Error occurred while checking health: $_"
             }
+            
+            if (-not (Get-Process -Id $process.Id -ErrorAction SilentlyContinue)){
+                Write-Error "Screenpipe process has terminated during health checks"
+                Get-Content .\test_data\logs\screenpipe_output.log
+                Get-Content .\test_data\logs\screenpipe_error.log
+                exit 1
+            }
           }
 
           Write-Error "Health check failed after 5 minutes"
-          Get-Content .\test_data\logs\screenpipe.log
+          Get-Content .\test_data\logs\screenpipe_output.log
+          Get-Content .\test_data\logs\screenpipe_error.log
           Write-Output "Process list:"
           Get-Process | Where-Object { $_.Name -match 'screenpipe|ffmpeg' } | Format-Table -AutoSize
           exit 1
