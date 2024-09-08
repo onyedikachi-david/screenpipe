@@ -11,12 +11,11 @@ try {
 
     # Try to set the audio output to the VB-CABLE device
     try {
-        $devices = [System.Speech.Synthesis.SpeechSynthesizer]::InstalledVoices
-        $vbCableDevice = $devices | Where-Object { $_.VoiceInfo.Name -like "*CABLE Output*" }
-        
-        if ($vbCableDevice) {
-            $synthesizer.SelectVoice($vbCableDevice.VoiceInfo.Name)
-            Write-Output "Selected VB-CABLE Output device: $($vbCableDevice.VoiceInfo.Name)"
+        $audioDevices = Get-WmiObject Win32_SoundDevice | Where-Object { $_.Name -like "*CABLE Output*" }
+        if ($audioDevices) {
+            $vbCableDevice = $audioDevices[0].Name
+            Write-Output "Found VB-CABLE Output device: $vbCableDevice"
+            $synthesizer.SetOutputToWaveFile("\\.\pipe\CABLE-A")
         } else {
             Write-Output "VB-CABLE Output device not found. Using default device."
             $synthesizer.SetOutputToDefaultAudioDevice()
