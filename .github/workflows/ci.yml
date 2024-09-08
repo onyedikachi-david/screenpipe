@@ -327,8 +327,39 @@ jobs:
           Invoke-WebRequest -Uri $url -OutFile $output
           Expand-Archive -Path $output -DestinationPath "VBCABLE_Driver"
           cd VBCABLE_Driver
-          .\VBCABLE_Setup_x64.exe -i -h
+          # Use silent installation
+          Start-Process -FilePath ".\VBCABLE_Setup_x64.exe" -ArgumentList "/i", "/s" -Wait
           cd ..
+
+      - name: Verify audio devices
+        shell: pwsh
+        run: |
+          Write-Output "All audio devices:"
+          Get-WmiObject Win32_SoundDevice | Select-Object Name, Status
+
+          Write-Output "VB-CABLE devices:"
+          Get-WmiObject Win32_SoundDevice | Where-Object { $_.Name -like "*CABLE*" } | Select-Object Name, Status
+
+          Write-Output "Default audio devices:"
+          Get-CimInstance -Namespace root/cimv2 -ClassName Win32_SoundDevice | Where-Object { $_.Default -eq $true } | Select-Object Name, DeviceID
+
+      - name: Setup audio device for testing
+        shell: pwsh
+        run: |
+          $vbCable = Get-WmiObject Win32_SoundDevice | Where-Object { $_.Name -like "*CABLE Output*" }
+          if ($vbCable) {
+            $env:TEST_AUDIO_DEVICE = $vbCable.Name
+            Write-Output "Using VB-CABLE device: $($env:TEST_AUDIO_DEVICE)"
+          } else {
+            $defaultOutput = Get-CimInstance -Namespace root/cimv2 -ClassName Win32_SoundDevice | Where-Object { $_.Default -eq $true -and $_.ConfigManagerErrorCode -eq 0 } | Select-Object -First 1
+            if ($defaultOutput) {
+              $env:TEST_AUDIO_DEVICE = $defaultOutput.Name
+              Write-Output "VB-CABLE not found. Using default output device: $($env:TEST_AUDIO_DEVICE)"
+            } else {
+              Write-Error "No suitable audio device found"
+              exit 1
+            }
+          }
 
       - name: Verify VB-CABLE installation
         shell: pwsh
@@ -378,7 +409,8 @@ jobs:
           }
 
           # Start screenpipe with correct arguments
-          $process = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1", "--audio-device", "CABLE Output (VB-Audio Virtual Cable)" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe_output.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
+          # $process = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1", "--audio-device", "CABLE Output (VB-Audio Virtual Cable)" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe_output.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
+          $process = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1", "--audio-device", "$env:TEST_AUDIO_DEVICE" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe_output.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
 
           if ($null -eq $process) {
             Write-Error "Failed to start screenpipe process"
