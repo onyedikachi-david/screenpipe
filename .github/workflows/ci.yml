@@ -344,29 +344,12 @@ jobs:
             Write-Error "screenpipe.exe not found"
             exit 1
           }
+          # Start screenpipe
+          Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1" -NoNewWindow -PassThru
 
-          # Start screenpipe and capture its process ID
-          $screenpipeProcess = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1"
-          $screenpipePID = $screenpipeProcess.Id
-          Write-Output "Screenpipe started with PID: $screenpipePID"
 
-          # Wait for process to exit or timeout
-          $timeout = 60
-          try {
-            if (Wait-Process -Id $screenpipePID -Timeout $timeout -ErrorAction Stop) {
-              Write-Error "Screenpipe process has exited unexpectedly"
-            } else {
-              Write-Output "Screenpipe process is still running after $timeout seconds"
-            }
-          } catch {
-            Write-Output "Screenpipe process is still running after $timeout seconds"
-          }
-
-          # Output log contents
-          Write-Output "Screenpipe log:"
-          Get-Content .\test_data\logs\screenpipe.log
-          Write-Output "Screenpipe error log:"
-          Get-Content .\test_data\logs\screenpipe_error.log
+          # Wait for screenpipe to start
+          Start-Sleep -Seconds 20
 
           # Start screen and audio simulation
           Start-Process -FilePath powershell -ArgumentList "-File", ".\scripts\simulate_screen_activity.ps1" -NoNewWindow
@@ -377,16 +360,6 @@ jobs:
           $interval = 10
           for ($i = 0; $i -lt $attempts; $i++) {
             Start-Sleep -Seconds $interval
-            
-            # Check if screenpipe is still running
-            $runningProcess = Get-Process -Id $screenpipePID -ErrorAction SilentlyContinue
-            if ($null -eq $runningProcess) {
-              Write-Error "Screenpipe process has exited unexpectedly during health checks"
-              Get-Content .\test_data\logs\screenpipe.log
-              Get-Content .\test_data\logs\screenpipe_error.log
-              exit 1
-            }
-            
             try {
               $response = Invoke-RestMethod -Uri http://localhost:3030/health -ErrorAction Stop
               Write-Output "Health check $($i+1): $($response | ConvertTo-Json -Compress)"
@@ -401,16 +374,76 @@ jobs:
 
           Write-Error "Health check failed after 5 minutes"
           Get-Content .\test_data\logs\screenpipe.log
-          Get-Content .\test_data\logs\screenpipe_error.log
           Write-Output "Process list:"
           Get-Process | Where-Object { $_.Name -match 'screenpipe|ffmpeg' } | Format-Table -AutoSize
-          Write-Output "Network connections:"
-          netstat -ano | Select-String "3030"
           exit 1
 
-      - name: Upload logs
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: windows-test-logs
-          path: .\test_data\logs\*
+      #     # Start screenpipe and capture its process ID
+      #     $screenpipeProcess = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1"
+      #     $screenpipePID = $screenpipeProcess.Id
+      #     Write-Output "Screenpipe started with PID: $screenpipePID"
+
+      #     # Wait for process to exit or timeout
+      #     $timeout = 60
+      #     try {
+      #       if (Wait-Process -Id $screenpipePID -Timeout $timeout -ErrorAction Stop) {
+      #         Write-Error "Screenpipe process has exited unexpectedly"
+      #       } else {
+      #         Write-Output "Screenpipe process is still running after $timeout seconds"
+      #       }
+      #     } catch {
+      #       Write-Output "Screenpipe process is still running after $timeout seconds"
+      #     }
+
+      #     # Output log contents
+      #     Write-Output "Screenpipe log:"
+      #     Get-Content .\test_data\logs\screenpipe.log
+      #     Write-Output "Screenpipe error log:"
+      #     Get-Content .\test_data\logs\screenpipe_error.log
+
+      #     # Start screen and audio simulation
+      #     Start-Process -FilePath powershell -ArgumentList "-File", ".\scripts\simulate_screen_activity.ps1" -NoNewWindow
+      #     Start-Process -FilePath powershell -ArgumentList "-File", ".\scripts\simulate_audio_activity.ps1" -NoNewWindow
+
+      #     # Health checks
+      #     $attempts = 30
+      #     $interval = 10
+      #     for ($i = 0; $i -lt $attempts; $i++) {
+      #       Start-Sleep -Seconds $interval
+
+      #       # Check if screenpipe is still running
+      #       $runningProcess = Get-Process -Id $screenpipePID -ErrorAction SilentlyContinue
+      #       if ($null -eq $runningProcess) {
+      #         Write-Error "Screenpipe process has exited unexpectedly during health checks"
+      #         Get-Content .\test_data\logs\screenpipe.log
+      #         Get-Content .\test_data\logs\screenpipe_error.log
+      #         exit 1
+      #       }
+
+      #       try {
+      #         $response = Invoke-RestMethod -Uri http://localhost:3030/health -ErrorAction Stop
+      #         Write-Output "Health check $($i+1): $($response | ConvertTo-Json -Compress)"
+      #         if ($response.status -eq "Healthy" -and $response.frame_status -eq "OK" -and $response.audio_status -eq "OK") {
+      #           Write-Output "Health check passed"
+      #           exit 0
+      #         }
+      #       } catch {
+      #         Write-Output "Error occurred while checking health: $_"
+      #       }
+      #     }
+
+      #     Write-Error "Health check failed after 5 minutes"
+      #     Get-Content .\test_data\logs\screenpipe.log
+      #     Get-Content .\test_data\logs\screenpipe_error.log
+      #     Write-Output "Process list:"
+      #     Get-Process | Where-Object { $_.Name -match 'screenpipe|ffmpeg' } | Format-Table -AutoSize
+      #     Write-Output "Network connections:"
+      #     netstat -ano | Select-String "3030"
+      #     exit 1
+
+      # - name: Upload logs
+      #   if: always()
+      #   uses: actions/upload-artifact@v3
+      #   with:
+      #     name: windows-test-logs
+      #     path: .\test_data\logs\*
