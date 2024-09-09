@@ -340,18 +340,31 @@ jobs:
             Write-Warning "Scream audio device not found. TEST_AUDIO_DEVICE will not be set."
           }
 
+          # Additional debugging information
+          Write-Output "Audio endpoints:"
+          Get-AudioDevice -List | Format-Table Name, Type, Default, ID
+
+          Write-Output "MMDevice audio endpoints:"
+          [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms")
+          $devices = [System.Windows.Forms.SystemInformation]::SoundDevices
+          $devices | ForEach-Object { Write-Output $_ }
+
       - name: Install Tesseract OCR
+        shell: pwsh
         run: |
-          choco install tesseract
+          choco install tesseract -y
+          $env:Path += ";C:\Program Files\Tesseract-OCR"
           refreshenv
-          tesseract --version
+          Write-Output "Tesseract version:"
+          & "C:\Program Files\Tesseract-OCR\tesseract.exe" --version
 
       - name: Setup and run CLI (Windows)
         shell: pwsh
         run: |
-          # Add Tesseract to PATH
+          # Ensure Tesseract is in PATH
           $env:Path += ";C:\Program Files\Tesseract-OCR"
-          tesseract --version
+          Write-Output "Tesseract version:"
+          & "C:\Program Files\Tesseract-OCR\tesseract.exe" --version
 
           $env:RUST_LOG = "trace,screenpipe=trace,screenpipe_audio=trace"
           $env:RUST_BACKTRACE = "full"
