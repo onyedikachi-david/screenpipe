@@ -298,138 +298,55 @@ jobs:
       - name: Install dependencies
         shell: pwsh
         run: |
-          # Install Chocolatey packages
           choco install ffmpeg pkgconfiglite rust -y
-
-          # Install Visual Studio Build Tools
           choco install visualstudio2022buildtools -y
           choco install visualstudio2022-workload-vctools -y
-
-          # Install vcpkg
           git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
           C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
           C:\vcpkg\vcpkg.exe integrate install --disable-metrics
           C:\vcpkg\vcpkg.exe install ffmpeg
-
-          # Set environment variables
           $env:PKG_CONFIG_PATH = "C:\vcpkg\packages\ffmpeg_x64-windows\lib\pkgconfig"
           $env:VCPKG_ROOT = "C:\vcpkg"
           $env:LIBCLANG_PATH = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin"
-
-          # Refresh PATH
           $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 
-      # - name: Install VB-CABLE Driver
-      #   shell: pwsh
-      #   run: |
-      #     $url = "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip"
-      #     $output = "VBCABLE_Driver_Pack43.zip"
-      #     Invoke-WebRequest -Uri $url -OutFile $output
-      #     Expand-Archive -Path $output -DestinationPath "VBCABLE_Driver"
-      #     cd VBCABLE_Driver
-      #     # Use silent installation
-      #     Start-Process -FilePath ".\VBCABLE_Setup_x64.exe" -ArgumentList "/i", "/s" -Wait
-      #     cd ..
-
-      # - name: Verify audio devices
-      #   shell: pwsh
-      #   run: |
-      #     Write-Output "All audio devices:"
-      #     Get-WmiObject Win32_SoundDevice | Select-Object Name, Status
-
-      #     Write-Output "VB-CABLE devices:"
-      #     Get-WmiObject Win32_SoundDevice | Where-Object { $_.Name -like "*CABLE*" } | Select-Object Name, Status
-
-      #     Write-Output "Default audio devices:"
-      #     Get-CimInstance -Namespace root/cimv2 -ClassName Win32_SoundDevice | Where-Object { $_.Default -eq $true } | Select-Object Name, DeviceID
-
-      # - name: Setup audio device for testing
-      #   shell: pwsh
-      #   run: |
-      #     $vbCable = Get-WmiObject Win32_SoundDevice | Where-Object { $_.Name -like "*CABLE Output*" }
-      #     if ($vbCable) {
-      #       $env:TEST_AUDIO_DEVICE = $vbCable.Name
-      #       Write-Output "Using VB-CABLE device: $($env:TEST_AUDIO_DEVICE)"
-      #     } else {
-      #       $defaultOutput = Get-CimInstance -Namespace root/cimv2 -ClassName Win32_SoundDevice | Where-Object { $_.Default -eq $true -and $_.ConfigManagerErrorCode -eq 0 } | Select-Object -First 1
-      #       if ($defaultOutput) {
-      #         $env:TEST_AUDIO_DEVICE = $defaultOutput.Name
-      #         Write-Output "VB-CABLE not found. Using default output device: $($env:TEST_AUDIO_DEVICE)"
-      #       } else {
-      #         Write-Error "No suitable audio device found"
-      #         exit 1
-      #       }
-      #     }
-
-      # - name: Verify VB-CABLE installation
-      #   shell: pwsh
-      #   run: |
-      #     Get-WmiObject Win32_SoundDevice | Where-Object { $_.Name -like "*CABLE Output*" } | Select-Object Name, Status
-      # - name: Check VB-CABLE initialization
-      #   shell: pwsh
-      #   run: |
-      #     $audioDevice = Get-WmiObject Win32_SoundDevice | Where-Object { $_.Name -like "*CABLE Output*" }
-      #     if ($audioDevice) {
-      #       Write-Output "VB-CABLE Output device found: $($audioDevice.Name)"
-      #       if ($audioDevice.Status -eq "OK") {
-      #         Write-Output "VB-CABLE Output device is initialized and ready"
-      #       } else {
-      #         Write-Error "VB-CABLE Output device is not ready. Status: $($audioDevice.Status)"
-      #         exit 1
-      #       }
-      #     } else {
-      #       Write-Error "VB-CABLE Output device not found"
-      #       exit 1
-      #     }
-
-      # - name: List audio devices after VB-CABLE installation
-      #   shell: pwsh
-      #   run: |
-      #     Get-WmiObject Win32_SoundDevice | Select-Object Name, Status
-
-      - name: List available audio devices
-        shell: pwsh
+      - name: Install Scream virtual audio driver
+        shell: powershell
         run: |
-          Write-Output "All audio devices:"
-          Get-WmiObject Win32_SoundDevice | Select-Object Name, Status
-
-          Write-Output "Default audio devices:"
-          Get-CimInstance -Namespace root/cimv2 -ClassName Win32_SoundDevice | Where-Object { $_.Default -eq $true } | Select-Object Name, DeviceID
+          Start-Service audio*
+          Invoke-WebRequest https://github.com/duncanthrax/scream/releases/download/3.6/Scream3.6.zip -OutFile C:\Scream3.6.zip
+          Expand-Archive -Path C:\Scream3.6.zip -DestinationPath C:\Scream
+          $cert = (Get-AuthenticodeSignature C:\Scream\Install\driver\Scream.sys).SignerCertificate
+          $store = [System.Security.Cryptography.X509Certificates.X509Store]::new("TrustedPublisher", "LocalMachine")
+          $store.Open("ReadWrite")
+          $store.Add($cert)
+          $store.Close()
+          cd C:\Scream\Install\driver
+          C:\Scream\Install\helpers\devcon install Scream.inf *Scream
 
       - name: Setup audio device for testing
         shell: pwsh
         run: |
-          $defaultOutput = Get-CimInstance -Namespace root/cimv2 -ClassName Win32_SoundDevice | Where-Object { $_.Default -eq $true -and $_.ConfigManagerErrorCode -eq 0 } | Select-Object -First 1
-          if ($defaultOutput) {
-            $env:TEST_AUDIO_DEVICE = $defaultOutput.Name
-            Write-Output "Using default output device: $($env:TEST_AUDIO_DEVICE)"
+          Write-Output "All audio devices:"
+          Get-WmiObject Win32_SoundDevice | Select-Object Name, Status, ConfigManagerErrorCode | Format-Table -AutoSize
+
+          Write-Output "Scream audio devices:"
+          $screamDevice = Get-WmiObject Win32_SoundDevice | Where-Object { $_.Name -like "*Scream*" }
+          if ($screamDevice) {
+            $env:TEST_AUDIO_DEVICE = $screamDevice.Name
+            Write-Output "Using Scream audio device: $($env:TEST_AUDIO_DEVICE)"
           } else {
-            Write-Error "No suitable audio device found"
+            Write-Error "Scream audio device not found"
             exit 1
           }
+
       - name: Setup and run CLI (Windows)
         shell: pwsh
         run: |
-          # Set up environment
           $env:RUST_LOG = "trace,screenpipe=trace,screenpipe_audio=trace"
           $env:RUST_BACKTRACE = "full"
           New-Item -ItemType Directory -Force -Path .\test_data\logs
 
-          # Debug: List directory contents
-          Write-Output "Directory contents:"
-          Get-ChildItem -Recurse
-
-          # Debug: Check screenpipe.exe exists and its permissions
-          if (Test-Path .\screenpipe.exe) {
-            Write-Output "screenpipe.exe exists"
-            Get-Acl .\screenpipe.exe | Format-List
-          } else {
-            Write-Error "screenpipe.exe not found"
-            exit 1
-          }
-
-          # Start screenpipe with correct arguments
-          # $process = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1", "--audio-device", "CABLE Output (VB-Audio Virtual Cable)" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe_output.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
           $process = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1", "--audio-device", "$env:TEST_AUDIO_DEVICE" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe_output.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
 
           if ($null -eq $process) {
@@ -439,7 +356,6 @@ jobs:
 
           Write-Output "Screenpipe process started with PID: $($process.Id)"
 
-          # Wait for initialization
           Start-Sleep -Seconds 60
 
           if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) {
