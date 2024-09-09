@@ -319,26 +319,79 @@ jobs:
           # Refresh PATH
           $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 
-      - name: Install VB-CABLE Driver
-        shell: pwsh
-        run: |
-          $url = "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip"
-          $output = "VBCABLE_Driver_Pack43.zip"
-          Invoke-WebRequest -Uri $url -OutFile $output
-          Expand-Archive -Path $output -DestinationPath "VBCABLE_Driver"
-          cd VBCABLE_Driver
-          # Use silent installation
-          Start-Process -FilePath ".\VBCABLE_Setup_x64.exe" -ArgumentList "/i", "/s" -Wait
-          cd ..
+      # - name: Install VB-CABLE Driver
+      #   shell: pwsh
+      #   run: |
+      #     $url = "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip"
+      #     $output = "VBCABLE_Driver_Pack43.zip"
+      #     Invoke-WebRequest -Uri $url -OutFile $output
+      #     Expand-Archive -Path $output -DestinationPath "VBCABLE_Driver"
+      #     cd VBCABLE_Driver
+      #     # Use silent installation
+      #     Start-Process -FilePath ".\VBCABLE_Setup_x64.exe" -ArgumentList "/i", "/s" -Wait
+      #     cd ..
 
-      - name: Verify audio devices
+      # - name: Verify audio devices
+      #   shell: pwsh
+      #   run: |
+      #     Write-Output "All audio devices:"
+      #     Get-WmiObject Win32_SoundDevice | Select-Object Name, Status
+
+      #     Write-Output "VB-CABLE devices:"
+      #     Get-WmiObject Win32_SoundDevice | Where-Object { $_.Name -like "*CABLE*" } | Select-Object Name, Status
+
+      #     Write-Output "Default audio devices:"
+      #     Get-CimInstance -Namespace root/cimv2 -ClassName Win32_SoundDevice | Where-Object { $_.Default -eq $true } | Select-Object Name, DeviceID
+
+      # - name: Setup audio device for testing
+      #   shell: pwsh
+      #   run: |
+      #     $vbCable = Get-WmiObject Win32_SoundDevice | Where-Object { $_.Name -like "*CABLE Output*" }
+      #     if ($vbCable) {
+      #       $env:TEST_AUDIO_DEVICE = $vbCable.Name
+      #       Write-Output "Using VB-CABLE device: $($env:TEST_AUDIO_DEVICE)"
+      #     } else {
+      #       $defaultOutput = Get-CimInstance -Namespace root/cimv2 -ClassName Win32_SoundDevice | Where-Object { $_.Default -eq $true -and $_.ConfigManagerErrorCode -eq 0 } | Select-Object -First 1
+      #       if ($defaultOutput) {
+      #         $env:TEST_AUDIO_DEVICE = $defaultOutput.Name
+      #         Write-Output "VB-CABLE not found. Using default output device: $($env:TEST_AUDIO_DEVICE)"
+      #       } else {
+      #         Write-Error "No suitable audio device found"
+      #         exit 1
+      #       }
+      #     }
+
+      # - name: Verify VB-CABLE installation
+      #   shell: pwsh
+      #   run: |
+      #     Get-WmiObject Win32_SoundDevice | Where-Object { $_.Name -like "*CABLE Output*" } | Select-Object Name, Status
+      # - name: Check VB-CABLE initialization
+      #   shell: pwsh
+      #   run: |
+      #     $audioDevice = Get-WmiObject Win32_SoundDevice | Where-Object { $_.Name -like "*CABLE Output*" }
+      #     if ($audioDevice) {
+      #       Write-Output "VB-CABLE Output device found: $($audioDevice.Name)"
+      #       if ($audioDevice.Status -eq "OK") {
+      #         Write-Output "VB-CABLE Output device is initialized and ready"
+      #       } else {
+      #         Write-Error "VB-CABLE Output device is not ready. Status: $($audioDevice.Status)"
+      #         exit 1
+      #       }
+      #     } else {
+      #       Write-Error "VB-CABLE Output device not found"
+      #       exit 1
+      #     }
+
+      # - name: List audio devices after VB-CABLE installation
+      #   shell: pwsh
+      #   run: |
+      #     Get-WmiObject Win32_SoundDevice | Select-Object Name, Status
+
+      - name: List available audio devices
         shell: pwsh
         run: |
           Write-Output "All audio devices:"
           Get-WmiObject Win32_SoundDevice | Select-Object Name, Status
-
-          Write-Output "VB-CABLE devices:"
-          Get-WmiObject Win32_SoundDevice | Where-Object { $_.Name -like "*CABLE*" } | Select-Object Name, Status
 
           Write-Output "Default audio devices:"
           Get-CimInstance -Namespace root/cimv2 -ClassName Win32_SoundDevice | Where-Object { $_.Default -eq $true } | Select-Object Name, DeviceID
@@ -346,47 +399,14 @@ jobs:
       - name: Setup audio device for testing
         shell: pwsh
         run: |
-          $vbCable = Get-WmiObject Win32_SoundDevice | Where-Object { $_.Name -like "*CABLE Output*" }
-          if ($vbCable) {
-            $env:TEST_AUDIO_DEVICE = $vbCable.Name
-            Write-Output "Using VB-CABLE device: $($env:TEST_AUDIO_DEVICE)"
+          $defaultOutput = Get-CimInstance -Namespace root/cimv2 -ClassName Win32_SoundDevice | Where-Object { $_.Default -eq $true -and $_.ConfigManagerErrorCode -eq 0 } | Select-Object -First 1
+          if ($defaultOutput) {
+            $env:TEST_AUDIO_DEVICE = $defaultOutput.Name
+            Write-Output "Using default output device: $($env:TEST_AUDIO_DEVICE)"
           } else {
-            $defaultOutput = Get-CimInstance -Namespace root/cimv2 -ClassName Win32_SoundDevice | Where-Object { $_.Default -eq $true -and $_.ConfigManagerErrorCode -eq 0 } | Select-Object -First 1
-            if ($defaultOutput) {
-              $env:TEST_AUDIO_DEVICE = $defaultOutput.Name
-              Write-Output "VB-CABLE not found. Using default output device: $($env:TEST_AUDIO_DEVICE)"
-            } else {
-              Write-Error "No suitable audio device found"
-              exit 1
-            }
-          }
-
-      - name: Verify VB-CABLE installation
-        shell: pwsh
-        run: |
-          Get-WmiObject Win32_SoundDevice | Where-Object { $_.Name -like "*CABLE Output*" } | Select-Object Name, Status
-      - name: Check VB-CABLE initialization
-        shell: pwsh
-        run: |
-          $audioDevice = Get-WmiObject Win32_SoundDevice | Where-Object { $_.Name -like "*CABLE Output*" }
-          if ($audioDevice) {
-            Write-Output "VB-CABLE Output device found: $($audioDevice.Name)"
-            if ($audioDevice.Status -eq "OK") {
-              Write-Output "VB-CABLE Output device is initialized and ready"
-            } else {
-              Write-Error "VB-CABLE Output device is not ready. Status: $($audioDevice.Status)"
-              exit 1
-            }
-          } else {
-            Write-Error "VB-CABLE Output device not found"
+            Write-Error "No suitable audio device found"
             exit 1
           }
-
-      - name: List audio devices after VB-CABLE installation
-        shell: pwsh
-        run: |
-          Get-WmiObject Win32_SoundDevice | Select-Object Name, Status
-
       - name: Setup and run CLI (Windows)
         shell: pwsh
         run: |
