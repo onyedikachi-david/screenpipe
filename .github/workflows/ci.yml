@@ -340,9 +340,19 @@ jobs:
             Write-Warning "Scream audio device not found. TEST_AUDIO_DEVICE will not be set."
           }
 
+      - name: Install Tesseract OCR
+        run: |
+          choco install tesseract
+          refreshenv
+          tesseract --version
+
       - name: Setup and run CLI (Windows)
         shell: pwsh
         run: |
+          # Add Tesseract to PATH
+          $env:Path += ";C:\Program Files\Tesseract-OCR"
+          tesseract --version
+
           $env:RUST_LOG = "trace,screenpipe=trace,screenpipe_audio=trace"
           $env:RUST_BACKTRACE = "full"
           New-Item -ItemType Directory -Force -Path .\test_data\logs
