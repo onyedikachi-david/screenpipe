@@ -353,8 +353,10 @@ jobs:
           # Construct the command arguments
           $args = @("--data-dir", ".\test_data", "--fps", "1")
           if ($env:TEST_AUDIO_DEVICE) {
+            # Append "(output)" to the device name to specify it's an output device
+            $audioDeviceWithType = "$($env:TEST_AUDIO_DEVICE) (output)"
             # Escape the audio device name to handle spaces and special characters
-            $escapedAudioDevice = """$($env:TEST_AUDIO_DEVICE)"""
+            $escapedAudioDevice = """$audioDeviceWithType"""
             $args += "--audio-device", $escapedAudioDevice
           } else {
             Write-Warning "TEST_AUDIO_DEVICE is not set. Running without --audio-device parameter."
