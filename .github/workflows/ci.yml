@@ -353,13 +353,17 @@ jobs:
           # Construct the command arguments
           $args = @("--data-dir", ".\test_data", "--fps", "1")
           if ($env:TEST_AUDIO_DEVICE) {
-            $args += "--audio-device", $env:TEST_AUDIO_DEVICE
+            # Escape the audio device name to handle spaces and special characters
+            $escapedAudioDevice = """$($env:TEST_AUDIO_DEVICE)"""
+            $args += "--audio-device", $escapedAudioDevice
           } else {
             Write-Warning "TEST_AUDIO_DEVICE is not set. Running without --audio-device parameter."
           }
 
           # Start the process with the constructed arguments
-          $process = Start-Process -FilePath .\screenpipe.exe -ArgumentList $args -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe_output.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
+          $processArgs = $args -join ' '
+          Write-Output "Running command: .\screenpipe.exe $processArgs"
+          $process = Start-Process -FilePath .\screenpipe.exe -ArgumentList $processArgs -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe_output.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
 
           if ($null -eq $process) {
             Write-Error "Failed to start screenpipe process"
