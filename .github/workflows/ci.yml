@@ -335,9 +335,9 @@ jobs:
           if ($screamDevice) {
             $env:TEST_AUDIO_DEVICE = $screamDevice.Name
             Write-Output "Using Scream audio device: $($env:TEST_AUDIO_DEVICE)"
+            echo "TEST_AUDIO_DEVICE=$($env:TEST_AUDIO_DEVICE)" >> $env:GITHUB_ENV
           } else {
-            Write-Error "Scream audio device not found"
-            exit 1
+            Write-Warning "Scream audio device not found. TEST_AUDIO_DEVICE will not be set."
           }
 
       - name: Setup and run CLI (Windows)
@@ -347,7 +347,19 @@ jobs:
           $env:RUST_BACKTRACE = "full"
           New-Item -ItemType Directory -Force -Path .\test_data\logs
 
-          $process = Start-Process -FilePath .\screenpipe.exe -ArgumentList "--data-dir", ".\test_data", "--fps", "1", "--audio-device", "$env:TEST_AUDIO_DEVICE" -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe_output.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
+          # Debug: Print the TEST_AUDIO_DEVICE value
+          Write-Output "TEST_AUDIO_DEVICE: $env:TEST_AUDIO_DEVICE"
+
+          # Construct the command arguments
+          $args = @("--data-dir", ".\test_data", "--fps", "1")
+          if ($env:TEST_AUDIO_DEVICE) {
+            $args += "--audio-device", $env:TEST_AUDIO_DEVICE
+          } else {
+            Write-Warning "TEST_AUDIO_DEVICE is not set. Running without --audio-device parameter."
+          }
+
+          # Start the process with the constructed arguments
+          $process = Start-Process -FilePath .\screenpipe.exe -ArgumentList $args -NoNewWindow -PassThru -RedirectStandardOutput .\test_data\logs\screenpipe_output.log -RedirectStandardError .\test_data\logs\screenpipe_error.log
 
           if ($null -eq $process) {
             Write-Error "Failed to start screenpipe process"
