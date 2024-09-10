@@ -342,11 +342,12 @@ jobs:
 
           # Additional debugging information
           Write-Output "Audio endpoints:"
-          Get-CimInstance Win32_SoundDevice | Format-Table Name, Status, ConfigManagerErrorCode
+          Get-AudioDevice -List | Format-Table Name, Type, Default, ID
 
           Write-Output "MMDevice audio endpoints:"
-          Add-Type -AssemblyName System.Windows.Forms
-          [System.Windows.Forms.SystemInformation]::SoundDevices | ForEach-Object { Write-Output $_ }
+          [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms")
+          $devices = [System.Windows.Forms.SystemInformation]::SoundDevices
+          $devices | ForEach-Object { Write-Output $_ }
 
       - name: Install Tesseract OCR
         shell: pwsh
@@ -384,6 +385,21 @@ jobs:
             Write-Warning "TEST_AUDIO_DEVICE is not set. Running without --audio-device parameter."
           }
 
+          # Modify the audio simulation script
+          $audioSimulationScript = @"
+          Add-Type -AssemblyName System.Speech
+          `$synthesizer = New-Object System.Speech.Synthesis.SpeechSynthesizer
+          while (`$true) {
+              `$synthesizer.Speak("This is a test audio for Screenpipe.")
+              Start-Sleep -Seconds 5
+          }
+          "@
+          $audioSimulationScript | Out-File -FilePath .\scripts\simulate_audio_activity.ps1 -Encoding utf8
+
+          # Start screen and audio simulation
+          Start-Process -FilePath powershell -ArgumentList "-File", ".\scripts\simulate_screen_activity.ps1" -NoNewWindow
+          Start-Process -FilePath powershell -ArgumentList "-File", ".\scripts\simulate_audio_activity.ps1" -NoNewWindow
+
           # Start the process with the constructed arguments
           $processArgs = $args -join ' '
           Write-Output "Running command: .\screenpipe.exe $processArgs"
@@ -406,10 +422,6 @@ jobs:
             Get-Content .\test_data\logs\screenpipe_error.log
             exit 1
           }
-
-          # Start screen and audio simulation
-          Start-Process -FilePath powershell -ArgumentList "-File", ".\scripts\simulate_screen_activity.ps1" -NoNewWindow
-          Start-Process -FilePath powershell -ArgumentList "-File", ".\scripts\simulate_audio_activity.ps1" -NoNewWindow
 
           # Health checks
           $attempts = 30
@@ -441,6 +453,22 @@ jobs:
           Write-Output "Process list:"
           Get-Process | Where-Object { $_.Name -match 'screenpipe|ffmpeg' } | Format-Table -AutoSize
           exit 1
+
+      - name: Debug audio capture
+        shell: pwsh
+        run: |
+          Write-Output "Audio devices:"
+          Get-CimInstance Win32_SoundDevice | Format-Table Name, Status, ConfigManagerErrorCode
+
+          Write-Output "Active audio sessions:"
+          Get-Process | Where-Object {$_.Name -eq "audiodg"} | Format-Table Name, Id, CPU
+
+          Write-Output "Screenpipe process details:"
+          Get-Process -Name screenpipe | Format-Table Name, Id, CPU, WorkingSet, PrivateMemorySize
+
+          Write-Output "Recent Screenpipe log entries:"
+          Get-Content .\test_data\logs\screenpipe_output.log -Tail 50
+          Get-Content .\test_data\logs\screenpipe_error.log -Tail 50
 
       - name: Upload logs
         if: always()
