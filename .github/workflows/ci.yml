@@ -352,7 +352,7 @@ jobs:
 
           # Additional debugging information
           Write-Output "Audio endpoints:"
-          Get-AudioDevice -List | Format-Table Name, Type, Default, ID
+          Get-CimInstance Win32_SoundDevice | Format-Table Name, Status, ConfigManagerErrorCode
 
           Write-Output "MMDevice audio endpoints:"
           [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms")
