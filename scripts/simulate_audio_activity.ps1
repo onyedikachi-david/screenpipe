@@ -11,10 +11,9 @@ try {
 
     $audioDevice = $env:TEST_AUDIO_DEVICE
     if ($audioDevice) {
-        $audioDeviceWithType = "$audioDevice (output)"
-        Write-Output "Using audio device: $audioDeviceWithType"
+        Write-Output "Using audio device: $audioDevice"
         try {
-            $synthesizer.SetOutputToAudioDevice($audioDeviceWithType)
+            $synthesizer.SetOutputToAudioDevice($audioDevice)
         } catch {
             Write-Warning "Failed to set audio device. Error: $_"
             Write-Output "Falling back to default audio device."
