@@ -342,12 +342,11 @@ jobs:
 
           # Additional debugging information
           Write-Output "Audio endpoints:"
-          Get-AudioDevice -List | Format-Table Name, Type, Default, ID
+          Get-CimInstance Win32_SoundDevice | Format-Table Name, Status, ConfigManagerErrorCode
 
           Write-Output "MMDevice audio endpoints:"
-          [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms")
-          $devices = [System.Windows.Forms.SystemInformation]::SoundDevices
-          $devices | ForEach-Object { Write-Output $_ }
+          Add-Type -AssemblyName System.Windows.Forms
+          [System.Windows.Forms.SystemInformation]::SoundDevices | ForEach-Object { Write-Output $_ }
 
       - name: Install Tesseract OCR
         shell: pwsh
@@ -390,6 +389,7 @@ jobs:
           Add-Type -AssemblyName System.Speech
           `$synthesizer = New-Object System.Speech.Synthesis.SpeechSynthesizer
           while (`$true) {
+              Write-Output "Speaking test audio..."
               `$synthesizer.Speak("This is a test audio for Screenpipe.")
               Start-Sleep -Seconds 5
           }
