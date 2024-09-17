@@ -7,9 +7,9 @@
 name: Release App
 
 on:
-  # push:
-  #   tags:
-  #     - "v*"
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
 
 jobs:
@@ -40,9 +40,9 @@ jobs:
             args: "--target x86_64-apple-darwin --features metal"
             target: x86_64-apple-darwin
           - platform: "ubuntu-22.04" # Ubuntu x86_64
-            args: "" # TODO CUDA
+            args: "" # TODO CUDA, mkl
           - platform: "windows-latest" # Windows x86_64
-            args: "--target x86_64-pc-windows-msvc" # TODO CUDA?  --features "openblas"
+            args: "--target x86_64-pc-windows-msvc" # TODO CUDA, mkl?  --features "openblas"
             pre-build-args: "" # --openblas
             # windows arm: https://github.com/ahqsoftwares/tauri-ahq-store/blob/2fbc2103c222662b3c6ee0cd71fcde664824f0ef/.github/workflows/publish.yml#L136
 
@@ -86,10 +86,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            examples/apps/screenpipe-app-tauri/src-tauri/openblas
-            examples/apps/screenpipe-app-tauri/src-tauri/clblast
-            examples/apps/screenpipe-app-tauri/src-tauri/ffmpeg
-            examples/apps/screenpipe-app-tauri/src-tauri/tesseract-*
+            screenpipe-app-tauri/src-tauri/openblas
+            screenpipe-app-tauri/src-tauri/clblast
+            screenpipe-app-tauri/src-tauri/ffmpeg
+            screenpipe-app-tauri/src-tauri/tesseract-*
           key: ${{ matrix.platform }}-${{ matrix.args }}-pre-build
 
       - uses: actions/cache@v3
@@ -117,7 +117,7 @@ jobs:
 
       - name: Install frontend dependencies
         shell: bash
-        working-directory: ./examples/apps/screenpipe-app-tauri
+        working-directory: ./screenpipe-app-tauri
         run: |
           ls . 
           bun install
@@ -130,13 +130,13 @@ jobs:
         run: |
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
           ls -R .
-        working-directory: ./examples/apps/screenpipe-app-tauri
+        working-directory: ./screenpipe-app-tauri
 
       - name: Verify Tesseract Installation
         if: matrix.platform == 'windows-latest'
         shell: pwsh
         run: |
-          $env:PATH += ";${{ github.workspace }}\examples\apps\screenpipe-app-tauri\src-tauri\tesseract"
+          $env:PATH += ";${{ github.workspace }}\screenpipe-app-tauri\src-tauri\tesseract"
           tesseract --version
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Tesseract is not properly installed or not in PATH"
@@ -161,7 +161,34 @@ jobs:
       - name: Run pre_build.js on ${{ matrix.platform }}
         shell: bash
         run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
-        working-directory: ./examples/apps/screenpipe-app-tauri
+        working-directory: ./screenpipe-app-tauri
+
+      - name: Identify esaxx usage (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: |
+          cargo tree > cargo_tree_output.txt
+          findstr /i "esaxx" cargo_tree_output.txt
+        continue-on-error: true
+
+      - name: Install vcpkg
+        if: matrix.platform == 'windows-latest'
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: "5b1214315250939257ef5d62ecdcbca18cf4fb1c"
+
+      # - name: Install ONNX Runtime
+      #   if: matrix.platform == 'windows-latest'
+      #   run: vcpkg install onnxruntime:x64-windows
+
+      - name: Set up MSVC
+        if: matrix.platform == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install LLVM and Clang
+        if: matrix.platform == 'windows-latest'
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "10.0"
 
       - name: Build
         uses: tauri-apps/tauri-action@v0
@@ -180,6 +207,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
+          # RUSTFLAGS: "-C link-arg=-Wl,--allow-multiple-definition"
         with:
           tagName: app-v__VERSION__ # the action automatically replaces __VERSION__ with the app version.
           releaseName: "App v__VERSION__"
@@ -187,7 +215,7 @@ jobs:
           releaseDraft: true
           prerelease: true
           args: ${{ matrix.args }}
-          projectPath: "./examples/apps/screenpipe-app-tauri"
+          projectPath: "./screenpipe-app-tauri"
           tauriScript: bunx tauri -v
 
       - name: Upload Assets to CrabNebula Cloud
@@ -195,7 +223,7 @@ jobs:
         with:
           command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}
-          path: ./examples/apps/screenpipe-app-tauri/src-tauri
+          path: ./screenpipe-app-tauri/src-tauri
 
   # basically wait for macos manual add sset
   #publish:

@@ -13,6 +13,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::time::{sleep, timeout};
 
 const MAX_FPS: f64 = 30.0; // Adjust based on your needs
 const MAX_QUEUE_SIZE: usize = 10;
@@ -27,12 +28,22 @@ impl VideoCapture {
     pub fn new(
         output_path: &str,
         fps: f64,
+        video_chunk_duration: Duration,
         new_chunk_callback: impl Fn(&str) + Send + Sync + 'static,
         save_text_files: bool,
         ocr_engine: Arc<OcrEngine>,
         monitor_id: u32,
+        ignore_list: &[String],
+        include_list: &[String],
     ) -> Self {
         info!("Starting new video capture");
+        let fps = if fps.is_finite() && fps > 0.0 {
+            fps
+        } else {
+            warn!("Invalid FPS value: {}. Using default of 1.0", fps);
+            1.0
+        };
+        let interval = Duration::from_secs_f64(1.0 / fps);
         let video_frame_queue = Arc::new(ArrayQueue::new(MAX_QUEUE_SIZE));
         let ocr_frame_queue = Arc::new(ArrayQueue::new(MAX_QUEUE_SIZE));
         let new_chunk_callback = Arc::new(new_chunk_callback);
@@ -41,13 +52,17 @@ impl VideoCapture {
         let capture_video_frame_queue = video_frame_queue.clone();
         let capture_ocr_frame_queue = ocr_frame_queue.clone();
         let (result_sender, mut result_receiver) = channel(512);
+        let ignore_list_clone = ignore_list.to_vec();
+        let include_list_clone = include_list.to_vec();
         let _capture_thread = tokio::spawn(async move {
             continuous_capture(
                 result_sender,
-                Duration::from_secs_f64(1.0 / fps),
+                interval,
                 save_text_files,
                 *ocr_engine,
                 monitor_id,
+                &ignore_list_clone,
+                &include_list_clone,
             )
             .await;
         });
@@ -113,6 +128,8 @@ impl VideoCapture {
                 &output_path,
                 fps,
                 new_chunk_callback_clone,
+                monitor_id,
+                video_chunk_duration,
             )
             .await;
         });
@@ -128,9 +145,11 @@ async fn save_frames_as_video(
     output_path: &str,
     fps: f64,
     new_chunk_callback: Arc<dyn Fn(&str) + Send + Sync>,
+    monitor_id: u32,
+    video_chunk_duration: Duration,
 ) {
     debug!("Starting save_frames_as_video function");
-    let frames_per_video = 30; // Adjust this value as needed
+    let frames_per_video = (fps * video_chunk_duration.as_secs_f64()).ceil() as usize;
     let mut frame_count = 0;
     let (sender, mut receiver): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel(512);
     let sender = Arc::new(sender);
@@ -138,7 +157,7 @@ async fn save_frames_as_video(
     let mut current_stdin: Option<ChildStdin> = None;
 
     loop {
-        if frame_count % frames_per_video == 0 || current_ffmpeg.is_none() {
+        if frame_count >= frames_per_video || current_ffmpeg.is_none() {
             debug!("Starting new FFmpeg process");
             // Close previous FFmpeg process if exists
             if let Some(child) = current_ffmpeg.take() {
@@ -152,6 +171,8 @@ async fn save_frames_as_video(
                     error!("FFmpeg stderr: {}", String::from_utf8_lossy(&output.stderr));
                 }
             }
+            // Reset frame count
+            frame_count = 0;
 
             // Wait for at least one frame before starting a new FFmpeg process
             let first_frame = loop {
@@ -173,7 +194,7 @@ async fn save_frames_as_video(
             let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
             // Start new FFmpeg process with a new output file
             let output_file = PathBuf::from(output_path)
-                .join(format!("{}.mp4", formatted_time))
+                .join(format!("monitor_{}_{}.mp4", monitor_id, formatted_time))
                 .to_str()
                 .expect("Failed to create valid path")
                 .to_string();
@@ -247,12 +268,39 @@ async fn save_frames_as_video(
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
 
+        const MAX_RETRIES: usize = 3;
+        const RETRY_DELAY: Duration = Duration::from_millis(100);
+
         // Write encoded frames to FFmpeg
-        while let Ok(buffer) = receiver.try_recv() {
+        let write_timeout = Duration::from_secs_f64(1.0 / fps);
+        while let Ok(Some(buffer)) = timeout(write_timeout, receiver.recv()).await {
             if let Some(stdin) = current_stdin.as_mut() {
-                if let Err(e) = stdin.write_all(buffer.as_slice()).await {
-                    error!("Failed to write frame to ffmpeg: {}", e);
-                    break;
+                let mut retries = 0;
+                while retries < MAX_RETRIES {
+                    match stdin.write_all(&buffer).await {
+                        Ok(_) => {
+                            frame_count += 1;
+                            debug!("Wrote frame {} to FFmpeg", frame_count);
+                            break;
+                        }
+                        Err(e) => {
+                            retries += 1;
+                            if retries >= MAX_RETRIES {
+                                error!(
+                                    "Failed to write frame to ffmpeg after {} retries: {}",
+                                    MAX_RETRIES, e
+                                );
+                                // Consider breaking the outer loop or handling this failure
+                                break;
+                            } else {
+                                warn!(
+                                    "Failed to write frame to ffmpeg (attempt {}): {}. Retrying...",
+                                    retries, e
+                                );
+                                sleep(RETRY_DELAY).await;
+                            }
+                        }
+                    }
                 }
                 frame_count += 1;
                 debug!("Wrote frame {} to FFmpeg", frame_count);
@@ -267,13 +315,16 @@ async fn save_frames_as_video(
                         error!("Failed to flush FFmpeg input: {}", e);
                     }
                 }
+                // Break the loop if we've written enough frames for this chunk
+                if frame_count >= frames_per_video {
+                    debug!("finished writing frames for this chunk");
+                    break;
+                }
             }
         }
 
         // Yield to other tasks periodically
-        if frame_count % 100 == 0 {
-            tokio::task::yield_now().await;
-        }
+        tokio::task::yield_now().await;
     }
 }
 

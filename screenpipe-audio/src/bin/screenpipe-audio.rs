@@ -9,6 +9,7 @@ use screenpipe_audio::parse_audio_device;
 use screenpipe_audio::record_and_transcribe;
 use screenpipe_audio::AudioDevice;
 use screenpipe_audio::AudioTranscriptionEngine;
+use screenpipe_audio::VadEngineEnum;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -26,6 +27,9 @@ struct Args {
 
     #[clap(long, help = "List available audio devices")]
     list_audio_devices: bool,
+
+    #[clap(long, help = "Deepgram API key")]
+    deepgram_api_key: Option<String>,
 }
 
 fn print_devices(devices: &[AudioDevice]) {
@@ -59,6 +63,8 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
+    let deepgram_api_key = args.deepgram_api_key;
+
     let devices = if args.audio_device.is_empty() {
         vec![default_input_device()?, default_output_device().await?]
     } else {
@@ -78,16 +84,20 @@ async fn main() -> Result<()> {
 
     let chunk_duration = Duration::from_secs(10);
     let output_path = PathBuf::from("output.mp4");
-    let (whisper_sender, mut whisper_receiver, _) =
-        create_whisper_channel(Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3)).await?;
+    let (whisper_sender, mut whisper_receiver, _) = create_whisper_channel(
+        Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3),
+        VadEngineEnum::WebRtc, // Or VadEngineEnum::WebRtc, hardcoded for now
+        deepgram_api_key,
+        &output_path,
+    )
+    .await?;
     // Spawn threads for each device
     let recording_threads: Vec<_> = devices
         .into_iter()
         .enumerate()
-        .map(|(i, device)| {
+        .map(|(_, device)| {
             let device = Arc::new(device);
             let whisper_sender = whisper_sender.clone();
-            let output_path = output_path.with_file_name(format!("output_{}.mp4", i));
             let device_control = Arc::new(AtomicBool::new(true));
             let device_clone = Arc::clone(&device);
 
@@ -98,7 +108,6 @@ async fn main() -> Result<()> {
                 record_and_transcribe(
                     device_clone_2,
                     chunk_duration,
-                    output_path,
                     whisper_sender,
                     device_control_clone,
                 )

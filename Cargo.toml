@@ -7,13 +7,13 @@ members = [
     "screenpipe-integrations",
 ]
 exclude = [
-    "examples/apps/screenpipe-app-tauri/src-tauri",
+    "screenpipe-app-tauri/src-tauri",
 ]
 resolver = "2"
 
 
 [workspace.package]
-version = "0.1.78"
+version = "0.1.84"
 authors = ["louis030195 <hi@louis030195.com>"]
 description = ""
 repository = "https://github.com/mediar-ai/screenpipe"
@@ -33,10 +33,13 @@ hf-hub = "0.3.0"
 crossbeam = "0.8.4"
 image = "0.25"
 reqwest = { version = "0.11", features = ["blocking", "multipart", "json"] }
-
-# dev
 criterion = { version = "0.5.1", features = ["async_tokio"] }
+vcpkg = "0.2"
 
+[workspace.metadata.vcpkg]
+git = "https://github.com/microsoft/vcpkg"
+rev = "2023.04.15"
+dynamic = true
 
 
 

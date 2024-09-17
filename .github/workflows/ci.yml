@@ -11,6 +11,8 @@ on:
 jobs:
   test-ubuntu:
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-C link-arg=-Wl,--allow-multiple-definition"
     steps:
       - uses: actions/checkout@v3
       - uses: actions/cache@v3
@@ -27,6 +29,7 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
+          override: true
 
       - name: Install dependencies
         run: |
@@ -64,10 +67,7 @@ jobs:
       - name: Run pre_build.js on
         shell: bash
         run: bun ./scripts/pre_build.js
-        working-directory: ./examples/apps/screenpipe-app-tauri
-
-      # - name: Run tests
-      #   run: cargo test
+        working-directory: ./screenpipe-app-tauri
 
       - name: Copy test image
         shell: bash
@@ -102,7 +102,7 @@ jobs:
         env:
           SKIP_SCREENPIPE_SETUP: true # avoid trying to copy screenpipe binaries, not yet built (next step)
         run: bun ./scripts/pre_build.js
-        working-directory: ./examples/apps/screenpipe-app-tauri
+        working-directory: ./screenpipe-app-tauri
 
       - name: Copy test image
         shell: bash

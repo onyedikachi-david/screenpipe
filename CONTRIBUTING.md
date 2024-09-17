@@ -53,6 +53,22 @@ We follow [this](https://doc.rust-lang.org/cargo/guide/project-layout.html) fold
 
 ## Additional Notes
 
+### AI system prompt
+
+i use cursor with this prompt to help me with the code:
+
+```
+Rules:
+- Coding: always use lower case for logging stuff or UI
+- Coding: Rust: always use anyhow error, tokio instead of std stuff, avoid mutex if you can, prefer channels, write code easy to read for humans, fast for machines
+- Coding: when i ask to give me the full code it means FULL, no fucking // rest of the code comments GIVE ME THE FULL CODE
+- Coding: if it seems like you lack some context about a niche lib just ask me to provide the source code and i will (instead of providing a bad answer)
+- Coding: NextJS: make sure to use tailwind, typescript, shadcn, lucide, magicui, and framer-motion to make UIs amazing
+- Coding: Make sure to escape html thing like quotes etc properly. Only when necessary
+- Coding: When writing react or html code make sure to use thing like &apos; instead of ". Only when necessary (e.g inside quote themselves)
+```
+
+
 ### Principles 
 
 - **User fanatic: focus on building what people want and making users happy.**
@@ -94,6 +110,43 @@ You can add env var to `.vscode/settings.json`:
     "terminal.integrated.env.osx": {
         "DYLD_LIBRARY_PATH": "$(pwd)/screenpipe-vision/lib"
     }
+}
+```
+
+This is @louis030195 whole `.vscode/settings.json` file:
+
+```json
+{
+    "rust-analyzer.server.extraEnv": {
+        "PKG_CONFIG_ALLOW_SYSTEM_LIBS": "1",
+        "PKG_CONFIG_ALLOW_SYSTEM_CFLAGS": "1",
+        "PKG_CONFIG_PATH": "/opt/homebrew/lib/pkgconfig:/opt/homebrew/share/pkgconfig",
+        "PATH": "/usr/bin:/opt/homebrew/bin:${env:PATH}",
+        "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}"
+    },
+    "rust-analyzer.cargo.extraEnv": {
+        "PKG_CONFIG_ALLOW_SYSTEM_LIBS": "1",
+        "PKG_CONFIG_ALLOW_SYSTEM_CFLAGS": "1",
+        "PKG_CONFIG_PATH": "/opt/homebrew/lib/pkgconfig:/opt/homebrew/share/pkgconfig",
+        "PATH": "/usr/bin:/opt/homebrew/bin:${env:PATH}",
+        "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}"
+    },
+    // add env to integrated terminal
+    "terminal.integrated.env.osx": {
+        "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}",
+        "SCREENPIPE_APP_DEV": "true",
+    },
+    "rust-analyzer.cargo.features": [
+        "pipes"
+    ],
+    "rust-analyzer.cargo.runBuildScripts": true,
+    "rust-analyzer.checkOnSave.command": "clippy",
+    "rust-analyzer.checkOnSave.extraArgs": [
+        "--features",
+        "pipes"
+    ],
+    "rust-analyzer.cargo.allFeatures": false,
+    "rust-analyzer.cargo.noDefaultFeatures": false
 }
 ```
 

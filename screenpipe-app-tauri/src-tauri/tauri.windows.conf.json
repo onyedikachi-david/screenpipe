@@ -1,0 +1,13 @@
+{
+    "bundle": {
+        "externalBin": [
+            "screenpipe"
+        ],
+        "resources": {
+            "ffmpeg\\bin\\x64\\*": "./",
+            "ffmpeg\\lib\\*": "./",
+            "tesseract\\*": "./",
+            "onnxruntime*\\lib\\*.dll": "./"
+        }
+    }
+}
