@@ -143,16 +143,21 @@ export async function queryScreenpipe(
 ): Promise<ScreenpipeResponse | null> {
   try {
     console.log("params", params);
+
     const queryParams = new URLSearchParams(
       Object.entries({
-        q: params.q,
+        q: params.q ? encodeURIComponent(params.q) : undefined,
         offset: params.offset.toString(),
         limit: params.limit.toString(),
         start_time: params.start_time,
         end_time: params.end_time,
         content_type: params.content_type,
-        app_name: params.app_name,
-        window_name: params.window_name, // Add window_name to query parameters
+        app_name: params.app_name
+          ? encodeURIComponent(params.app_name)
+          : undefined,
+        window_name: params.window_name
+          ? encodeURIComponent(params.window_name)
+          : undefined,
         include_frames: params.include_frames.toString(),
         min_length: params.min_length.toString(),
         max_length: params.max_length.toString(),
