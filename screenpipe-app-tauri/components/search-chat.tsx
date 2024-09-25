@@ -70,6 +70,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { formatISO } from "date-fns";
 import { IconCode } from "@/components/ui/icons";
 import { CodeBlock } from "./ui/codeblock";
+import { SqlAutocompleteInput } from "./sql-autocomplete-input";
+import { encode } from "@/lib/utils";
+import { ExampleSearch, ExampleSearchCards } from "./example-search-cards";
 
 export function SearchChat() {
   // Search state
@@ -122,30 +125,69 @@ export function SearchChat() {
   const [isStreaming, setIsStreaming] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  const [selectAll, setSelectAll] = useState(true);
+
+  const [showExamples, setShowExamples] = useState(true);
+
+  const [hasSearched, setHasSearched] = useState(false);
+
+  const handleExampleSelect = async (example: ExampleSearch) => {
+    posthog.capture("example_search", { example: example.title });
+
+    const newWindowName = example.windowName || "";
+    const newAppName = example.appName || "";
+    const newLimit = example.limit || limit;
+    const newMinLength = example.minLength || minLength;
+    const newContentType =
+      (example.contentType as "all" | "ocr" | "audio") || contentType;
+    const newStartDate = example.startDate;
+
+    setWindowName(newWindowName);
+    setAppName(newAppName);
+    setLimit(newLimit);
+    setMinLength(newMinLength);
+    setContentType(newContentType);
+    setStartDate(newStartDate);
+    setShowExamples(false);
+
+    handleSearch(0, {
+      windowName: newWindowName,
+      appName: newAppName,
+      limit: newLimit,
+      minLength: newMinLength,
+      contentType: newContentType,
+      startDate: newStartDate,
+    });
+  };
+
   const generateCurlCommand = () => {
     const baseUrl = "http://localhost:3030";
-    const queryParams = new URLSearchParams({
+    const params = {
       content_type: contentType,
       limit: limit.toString(),
       offset: offset.toString(),
-      start_time: formatISO(startDate, { representation: "complete" }),
-      end_time: formatISO(endDate, { representation: "complete" }),
+      start_time: startDate.toISOString(),
+      end_time: endDate.toISOString(),
       min_length: minLength.toString(),
       max_length: maxLength.toString(),
-    });
+      q: query,
+      app_name: appName,
+      window_name: windowName,
+      include_frames: includeFrames ? "true" : undefined,
+    };
 
-    if (query) queryParams.append("q", query);
-    if (appName) queryParams.append("app_name", appName);
-    if (windowName) queryParams.append("window_name", windowName);
-    if (includeFrames) queryParams.append("include_frames", "true");
+    const queryParams = Object.entries(params)
+      .filter(([_, value]) => value !== undefined && value !== "")
+      .map(([key, value]) => `${key}=${encodeURIComponent(value!)}`)
+      .join("&");
 
-    return `curl "${baseUrl}/search?\\
-${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
+    return `curl "${baseUrl}/search?${queryParams}" | jq`;
   };
 
   useEffect(() => {
     if (results.length > 0) {
       setSelectedResults(new Set(results.map((_, index) => index)));
+      setSelectAll(true);
     }
   }, [results]);
 
@@ -372,7 +414,8 @@ ${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
     }
   };
 
-  const handleSearch = async (newOffset = 0) => {
+  const handleSearch = async (newOffset = 0, overrides: any = {}) => {
+    setHasSearched(true);
     queryHistory.saveToHistory();
     appNameHistory.saveToHistory();
     windowNameHistory.saveToHistory();
@@ -388,15 +431,16 @@ ${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
     try {
       const response = await queryScreenpipe({
         q: query || undefined,
-        content_type: contentType as "all" | "ocr" | "audio",
-        limit: limit,
+        content_type: overrides.contentType || contentType,
+        limit: overrides.limit || limit,
         offset: newOffset,
-        start_time: formatISO(startDate, { representation: "complete" }),
-        end_time: formatISO(endDate, { representation: "complete" }),
-        app_name: appName || undefined,
-        window_name: windowName || undefined,
+        start_time:
+          overrides.startDate?.toISOString() || startDate.toISOString(),
+        end_time: endDate.toISOString(),
+        app_name: overrides.appName || appName || undefined,
+        window_name: overrides.windowName || windowName || undefined,
         include_frames: includeFrames,
-        min_length: minLength,
+        min_length: overrides.minLength || minLength,
         max_length: maxLength,
       });
 
@@ -432,6 +476,23 @@ ${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
     }
   };
 
+  const handleBadgeClick = (value: string, type: "app" | "window") => {
+    if (type === "app") {
+      setAppName(value);
+    } else {
+      setWindowName(value);
+    }
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    setSelectAll(checked);
+    if (checked) {
+      setSelectedResults(new Set(results.map((_, index) => index)));
+    } else {
+      setSelectedResults(new Set());
+    }
+  };
+
   const renderSearchResults = () => {
     if (isLoading) {
       return Array(3)
@@ -448,8 +509,12 @@ ${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
         ));
     }
 
-    if (results.length === 0) {
-      return <p className="text-center">No results found</p>;
+    if (hasSearched && results.length === 0) {
+      return <p className="text-center">no results found</p>;
+    }
+
+    if (!hasSearched || results.length === 0) {
+      return null;
     }
 
     return results
@@ -559,12 +624,15 @@ ${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
               </Accordion>
               <div className="flex flex-wrap items-center gap-2 mt-2">
                 <p className="text-xs text-gray-400">
-                  {new Date(item.content.timestamp).toLocaleString()}
+                  {new Date(item.content.timestamp).toLocaleString()}{" "}
+                  {/* Display local time */}
                 </p>
                 {item.type === "OCR" && item.content.app_name && (
                   <Badge
                     className="text-xs cursor-pointer"
-                    onClick={() => setAppName(item.content.app_name)}
+                    onClick={() =>
+                      handleBadgeClick(item.content.app_name, "app")
+                    }
                   >
                     {item.content.app_name}
                   </Badge>
@@ -572,7 +640,9 @@ ${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
                 {item.type === "OCR" && item.content.window_name && (
                   <Badge
                     className="text-xs cursor-pointer"
-                    onClick={() => setWindowName(item.content.window_name)}
+                    onClick={() =>
+                      handleBadgeClick(item.content.window_name, "window")
+                    }
                   >
                     {item.content.window_name}
                   </Badge>
@@ -706,71 +776,34 @@ ${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
           </div>
         </div>
         <div className="space-y-2">
-          <div className="flex items-center space-x-2">
-            <Label htmlFor="app-name">app name</Label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-4 w-4 text-gray-400" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>
-                    enter the name of the app to search for content for example
-                    zoom, notion, etc. only works for ocr.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          <div className="relative">
-            <Laptop
-              className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
-              size={18}
-            />
-            <Input
-              id="app-name"
-              type="text"
-              placeholder="app name"
-              value={appName}
-              onChange={(e) => setAppName(e.target.value)}
-              autoCorrect="off"
-              className="pl-8"
-            />
-          </div>
+          <SqlAutocompleteInput
+            id="app-name"
+            placeholder="app name"
+            value={appName}
+            onChange={setAppName}
+            type="app"
+            icon={
+              <Laptop
+                className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
+                size={18}
+              />
+            }
+          />
         </div>
         <div className="space-y-2">
-          <div className="flex items-center space-x-2">
-            <Label htmlFor="window-name">window name</Label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-4 w-4 text-gray-400" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>
-                    enter the name of the window or tab to search for content.
-                    can be a browser tab name, app tab name, etc. only works for
-                    ocr.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          <div className="relative">
-            <Layout
-              className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
-              size={18}
-            />
-            <Input
-              id="window-name"
-              type="text"
-              placeholder="window name"
-              value={windowName}
-              onChange={(e) => setWindowName(e.target.value)}
-              autoCorrect="off"
-              className="pl-8"
-            />
-          </div>
+          <SqlAutocompleteInput
+            id="window-name"
+            placeholder="window name"
+            value={windowName}
+            onChange={setWindowName}
+            type="window"
+            icon={
+              <Layout
+                className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
+                size={18}
+              />
+            }
+          />
         </div>
         <div className="flex items-center space-x-2">
           <Switch
@@ -806,7 +839,9 @@ ${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
                 <TooltipContent>
                   <p>
                     select the number of results to display. usually ai cannot
-                    ingest more than 30 results at a time.
+                    ingest more than 30 OCR results at a time
+                    <br />
+                    and 1000 audio results at a time.
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -816,9 +851,9 @@ ${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
             id="limit-slider"
             value={[limit]}
             onValueChange={(value: number[]) => setLimit(value[0])}
-            min={1}
-            max={100}
-            step={1}
+            min={10}
+            max={150}
+            step={5}
           />
         </div>
         <div className="space-y-2">
@@ -913,16 +948,31 @@ ${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
                 <br />
                 <span className="text-xs text-gray-500">
                   note: you need to have `jq` installed to use the command.
-                </span>
+                </span>{" "}
               </DialogDescription>
             </DialogHeader>
-            <CodeBlock language="bash" value={generateCurlCommand()} />
+            <div className="overflow-x-auto">
+              <CodeBlock language="bash" value={generateCurlCommand()} />
+            </div>
           </DialogContent>
         </Dialog>
       </div>
+      {showExamples && results.length === 0 && (
+        <ExampleSearchCards onSelect={handleExampleSelect} />
+      )}
       {isLoading && (
         <div className="my-2">
           <Progress value={progress} className="w-full" />
+        </div>
+      )}
+      {results.length > 0 && (
+        <div className="flex items-center space-x-2 mb-4 my-8">
+          <Checkbox
+            id="select-all"
+            checked={selectAll}
+            onCheckedChange={handleSelectAll}
+          />
+          <Label htmlFor="select-all">select all results</Label>
         </div>
       )}
       <div className="space-y-4">
@@ -1032,7 +1082,7 @@ ${queryParams.toString().replace(/&/g, "\\\n&")}" | jq`;
           <ChevronDown className="h-6 w-6" />
         </Button>
       )}
-      <div className="h-24" />
+      {results.length > 0 && <div className="h-24" />}
     </div>
   );
 }

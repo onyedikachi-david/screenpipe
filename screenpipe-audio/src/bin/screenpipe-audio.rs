@@ -7,6 +7,7 @@ use screenpipe_audio::default_output_device;
 use screenpipe_audio::list_audio_devices;
 use screenpipe_audio::parse_audio_device;
 use screenpipe_audio::record_and_transcribe;
+use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::AudioDevice;
 use screenpipe_audio::AudioTranscriptionEngine;
 use screenpipe_audio::VadEngineEnum;
@@ -84,11 +85,12 @@ async fn main() -> Result<()> {
 
     let chunk_duration = Duration::from_secs(10);
     let output_path = PathBuf::from("output.mp4");
-    let (whisper_sender, mut whisper_receiver, _) = create_whisper_channel(
+    let (whisper_sender, whisper_receiver, _) = create_whisper_channel(
         Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3),
         VadEngineEnum::WebRtc, // Or VadEngineEnum::WebRtc, hardcoded for now
         deepgram_api_key,
         &output_path,
+        VadSensitivity::Medium,
     )
     .await?;
     // Spawn threads for each device

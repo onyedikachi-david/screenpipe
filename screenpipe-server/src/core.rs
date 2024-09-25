@@ -1,9 +1,10 @@
-use crate::cli::CliVadEngine;
+use crate::cli::{CliVadEngine, CliVadSensitivity};
 use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
 use crossbeam::queue::SegQueue;
 use futures::future::join_all;
 use log::{debug, error, info, warn};
+use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::{
     create_whisper_channel, record_and_transcribe, vad_engine::VadEngineEnum, AudioDevice,
     AudioInput, AudioTranscriptionEngine, DeviceControl, TranscriptionResult,
@@ -17,7 +18,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Handle;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 
 pub async fn start_continuous_recording(
@@ -42,15 +42,18 @@ pub async fn start_continuous_recording(
     ignored_windows: &[String],
     include_windows: &[String],
     deepgram_api_key: Option<String>,
+    vad_sensitivity: CliVadSensitivity,
 ) -> Result<()> {
     let (whisper_sender, whisper_receiver, whisper_shutdown_flag) = if audio_disabled {
         // Create a dummy channel if no audio devices are available, e.g. audio disabled
-        let (input_sender, _): (UnboundedSender<AudioInput>, UnboundedReceiver<AudioInput>) =
-            unbounded_channel();
+        let (input_sender, _): (
+            crossbeam::channel::Sender<AudioInput>,
+            crossbeam::channel::Receiver<AudioInput>,
+        ) = crossbeam::channel::bounded(100);
         let (_, output_receiver): (
-            UnboundedSender<TranscriptionResult>,
-            UnboundedReceiver<TranscriptionResult>,
-        ) = unbounded_channel();
+            crossbeam::channel::Sender<TranscriptionResult>,
+            crossbeam::channel::Receiver<TranscriptionResult>,
+        ) = crossbeam::channel::bounded(100);
         (
             input_sender,
             output_receiver,
@@ -62,6 +65,7 @@ pub async fn start_continuous_recording(
             VadEngineEnum::from(vad_engine),
             deepgram_api_key,
             &PathBuf::from(output_path.as_ref()),
+            VadSensitivity::from(vad_sensitivity),
         )
         .await?
     };
@@ -249,8 +253,8 @@ async fn record_video(
 async fn record_audio(
     db: Arc<DatabaseManager>,
     chunk_duration: Duration,
-    whisper_sender: UnboundedSender<AudioInput>,
-    mut whisper_receiver: UnboundedReceiver<TranscriptionResult>,
+    whisper_sender: crossbeam::channel::Sender<AudioInput>,
+    whisper_receiver: crossbeam::channel::Receiver<TranscriptionResult>,
     audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
     friend_wearable_uid: Option<String>,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,

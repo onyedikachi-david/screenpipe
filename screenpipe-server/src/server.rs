@@ -7,7 +7,6 @@ use axum::{
 };
 use crossbeam::queue::SegQueue;
 use futures::future::{try_join, try_join_all};
-use screenpipe_core::download_pipe;
 use screenpipe_vision::monitor::list_monitors;
 
 use crate::{
@@ -211,7 +210,7 @@ pub(crate) async fn search(
     (StatusCode, JsonResponse<serde_json::Value>),
 > {
     info!(
-        "Received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}",
+        "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}",
         query.q.as_deref().unwrap_or(""),
         query.content_type,
         query.pagination.limit,
@@ -226,7 +225,7 @@ pub(crate) async fn search(
 
     let query_str = query.q.as_deref().unwrap_or("");
 
-    // If app_name is specified, force content_type to OCR
+    // If app_name or window_name is specified, force content_type to OCR
     let content_type = if query.app_name.is_some() || query.window_name.is_some() {
         ContentType::OCR
     } else {
@@ -259,10 +258,10 @@ pub(crate) async fn search(
     )
     .await
     .map_err(|e| {
-        error!("Failed to perform search operations: {}", e);
+        error!("failed to perform search operations: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            JsonResponse(json!({"error": format!("Failed to perform search operations: {}", e)})),
+            JsonResponse(json!({"error": format!("failed to perform search operations: {}", e)})),
         )
     })?;
 
@@ -305,7 +304,7 @@ pub(crate) async fn search(
         .collect();
 
     if query.include_frames {
-        debug!("Extracting frames for OCR content");
+        debug!("extracting frames for ocr content");
         let frame_futures: Vec<_> = content_items
             .iter()
             .filter_map(|item| {
@@ -329,7 +328,7 @@ pub(crate) async fn search(
         }
     }
 
-    info!("Search completed: found {} results", total);
+    info!("search completed: found {} results", total);
     Ok(JsonResponse(PaginatedResponse {
         data: content_items,
         pagination: PaginationInfo {
@@ -589,15 +588,11 @@ async fn download_pipe_handler(
     JsonResponse(payload): JsonResponse<DownloadPipeRequest>,
 ) -> Result<JsonResponse<serde_json::Value>, (StatusCode, JsonResponse<Value>)> {
     debug!("Downloading pipe: {}", payload.url);
-    match download_pipe(&payload.url, state.screenpipe_dir.clone()).await {
-        Ok(pipe_dir) => {
-            let pipe_id = pipe_dir.file_name().unwrap().to_string_lossy().into_owned();
-
-            Ok(JsonResponse(json!({
-                "message": format!("Pipe {} downloaded successfully", pipe_id),
-                "pipe_id": pipe_id
-            })))
-        }
+    match state.pipe_manager.download_pipe(&payload.url).await {
+        Ok(pipe_dir) => Ok(JsonResponse(json!({
+            "message": format!("Pipe {} downloaded successfully", pipe_dir),
+            "pipe_id": pipe_dir
+        }))),
         Err(e) => {
             error!("Failed to download pipe: {}", e);
             Err((
@@ -797,6 +792,27 @@ async fn merge_frames_handler(
     }
 }
 
+#[derive(Deserialize)]
+struct RawSqlQuery {
+    query: String,
+}
+
+async fn execute_raw_sql(
+    State(state): State<Arc<AppState>>,
+    JsonResponse(payload): JsonResponse<RawSqlQuery>,
+) -> Result<JsonResponse<serde_json::Value>, (StatusCode, JsonResponse<serde_json::Value>)> {
+    match state.db.execute_raw_sql(&payload.query).await {
+        Ok(result) => Ok(JsonResponse(result)),
+        Err(e) => {
+            error!("Failed to execute raw SQL query: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            ))
+        }
+    }
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/search", get(search))
@@ -814,6 +830,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/update", post(update_pipe_config_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/health", get(health_check))
+        .route("/raw_sql", post(execute_raw_sql))
 }
 
 /*
@@ -875,6 +892,7 @@ curl "http://localhost:3030/search?limit=5&offset=0&content_type=ocr&start_time=
 curl "http://localhost:3030/search?q=libmp3&limit=5&offset=0&content_type=audio&start_time=$(date -u -v1d -v0H -v0M -v0S +%Y-%m-01T%H:%M:%SZ)" | jq
 
 curl "http://localhost:3030/search?app_name=cursor"
+curl "http://localhost:3030/search?content_type=audio&min_length=20"
 
 curl 'http://localhost:3030/search?q=Matt&offset=0&limit=50&start_time=2024-08-12T04%3A00%3A00Z&end_time=2024-08-12T05%3A00%3A00Z' | jq .
 
@@ -979,6 +997,9 @@ curl "http://localhost:3030/search?q=&limit=10&offset=0&max_length=10" | jq
 
 # Search for very long content
 curl "http://localhost:3030/search?q=&limit=10&offset=0&min_length=500" | jq
+
+
+curl "http://localhost:3030/search?limit=10&offset=0&min_length=500&content_type=audio" | jq
 
 
 # read random data and generate a clip using the merge endpoint

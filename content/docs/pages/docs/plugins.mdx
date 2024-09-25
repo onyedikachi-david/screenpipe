@@ -1,0 +1,96 @@
+import MotionDiv from '@/components/motion-div';
+
+# plugins (pipes)
+
+<MotionDiv>
+  an essential part of screenpipe is that it is extensible, providing powerful extensibility through custom workflows that interact with captured screen and audio data. whether you need to tag activities, generate summaries, or send data to third-party services, plugins allow you to tailor screenpipe to your specific needs.
+
+plugins in screenpipe are categorized into 2 types:
+
+- **pipes**: these are plugins with native integration with screenpipe. they can run within the cli/lib/app without the need for manual execution. they run in a sandboxed environment, and can be written in Typescript or Javascript.
+- **standalone scripts**: these are independent scripts that need to be run separately and may require additional setup.
+</MotionDiv>
+---
+# 1. pipes
+## overview of pipes
+
+<MotionDiv delay={0.3}>
+  pipes in screenpipe are plugins designed to process data captured from your screen and audio feeds. they automate workflows such as tagging, summarizing, and integrating data with external platforms like notion, salesforce, or slack.
+
+  **pipe workflow examples**:
+  - **pipe example**: screenpipe | ai tag | notion update
+  - **pipe example**: screenpipe | ai tag | slack report
+  - **pipe example**: screenpipe | log daily activities
+
+  **key features of pipes**:
+  - **custom workflows**: automate repetitive tasks such as tagging screen activity or summarizing audio transcriptions.
+  - **real-time processing**: pipes can process captured data in real-time.
+  - **integration capabilities**: extend the functionality by sending processed data to third-party apps.
+
+  **example use cases**:
+  - **ai activity tagging**: automatically tag screen or audio activities based on ai models.
+  - **meeting summaries**: generate summaries of meeting discussions using combined screen and audio data.
+  - **crm integration**: automatically log interactions or captured data into a crm like salesforce.
+
+  **running a pipe**:
+  - download the pipe (can be github or your local machine as well)
+  ```bash
+  screenpipe pipe download https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text
+  ```
+  - enable the pipe for use
+  ```bash
+  screenpipe pipe enable pipe-stream-ocr-text
+  ```
+  - run the pipe
+  ```bash
+  screenpipe 
+  ```
+
+this simple pipe will stream text to local markdown files in current directory.
+
+</MotionDiv>
+
+---
+
+## available pipes
+
+<MotionDiv delay={0.5}>
+  screenpipe provides a variety of pipes and standalone scripts that allow users to extend the platform's functionality with minimal effort. below is a table summarizing the available examples:
+
+| **example**                          | **description**                                  | **link**                          |
+| ------------------------------------ | ------------------------------------------------ | --------------------------------- |
+| **pipe tagging activity**            | automatically tag activities using ai            | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-tagging-activity)                         |
+| **pipe stream ocr text**             | stream ocr text from screen data                 | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text)                         |
+| **pipe activity topic tracker**      | track and summarize activities                   | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-activity-topic-tracker)                         |
+| **pipe engineering team logs**       | view daily work logs                             | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-phi3.5-engineering-team-logs)                         |
+| **pipe security check**              | notify user if detected any suspicious activity  | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-security-check)                         |
+| **pipe sync meetings to notion**     | sync meeting transcriptions & summaries to notion | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-sync-meetings-to-notion)                        |
+| **pipe focus notification buddy**     | help you stay focused                            | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-focus-notification-buddy)                         |
+
+</MotionDiv>
+
+---
+
+## developing pipes in screenpipe
+<MotionDiv delay={0.7}>
+<iframe width="100%" height="500" src="https://www.youtube.com/embed/icqhgzqhya?si=kjs4t94dqex48xky" title="youtube video player" frameborder="0" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; web-share" allowfullscreen></iframe>
+
+screenpipe's plugin system, referred to as **pipes**, allows you to create customized pipes that automate workflows. these pipes can process, annotate, analyze, summarize, or integrate your screen and audio data with other tools.
+
+users can begin by cloning an existing pipe, such as [pipe stream ocr text](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text). you can use any javascript/typescript modules to build your use case, from simple to highly advanced. the primary requirement is that the pipe folder must contain a file named `pipe.js`, `pipe.ts`, `main.js`, or `main.ts`. you can also export the final built file as `main.js` or `pipe.js`.
+
+once the pipe is ready, follow these steps to make it work with `screenpipe`:
+
+- **download the pipe** (from local or github url):
+  ```bash
+  screenpipe pipe download path/to/pipe-name
+  ```
+
+- **enable the pipe** (enabling will activate the pipe, similar to installing it in screenpipe):
+  ```bash
+  screenpipe pipe enable pipe-name
+  ```
+
+this setup enables the creation of countless workflows tailored to specific needs, automating tedious or complex tasks.
+
+</MotionDiv>

@@ -1,7 +1,17 @@
 pub mod ffmpeg;
 pub use ffmpeg::find_ffmpeg_path;
+#[cfg(feature = "llm")]
 pub mod llm;
+#[cfg(feature = "llm")]
 pub use llm::*;
+#[cfg(feature = "llm")]
+pub mod google;
+#[cfg(feature = "llm")]
+pub use google::*;
+#[cfg(feature = "llm")]
+pub mod mistral;
+#[cfg(feature = "llm")]
+pub use mistral::*;
 #[cfg(feature = "pipes")]
 pub mod pipes;
 #[cfg(feature = "pipes")]

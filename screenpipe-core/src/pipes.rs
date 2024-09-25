@@ -27,10 +27,17 @@ mod pipes {
     use tracing::{error, info};
     use url::Url;
 
-    // Add this function near the top of the file, after the imports
+    // Update this function near the top of the file
     fn sanitize_pipe_name(name: &str) -> String {
         let re = Regex::new(r"[^a-zA-Z0-9_-]").unwrap();
-        re.replace_all(name, "-").to_string()
+        let sanitized = re.replace_all(name, "-").to_string();
+
+        // Remove "-ref-main/" suffix if it exists
+        sanitized
+            .strip_suffix("-ref-main/")
+            .or_else(|| sanitized.strip_suffix("-ref-main"))
+            .unwrap_or(&sanitized)
+            .to_string()
     }
 
     #[op2]
@@ -316,6 +323,8 @@ mod pipes {
             globalThis.process.env.TEMP_DIR = "{}";
             globalThis.process.env.PIPE_ID = "{}";
             globalThis.process.env.PIPE_FILE = "{}";
+            globalThis.process.env.PIPE_DIR = "{}";
+            globalThis.process.env.OS = "{}";
             "#,
                 screenpipe_dir
                     .to_string_lossy()
@@ -334,7 +343,18 @@ mod pipes {
                     .replace('\\', "\\\\")
                     .replace('\"', "\\\""),
                 pipe.replace('\"', "\\\""),
-                file_path.replace('\\', "\\\\").replace('\"', "\\\"")
+                file_path.replace('\\', "\\\\").replace('\"', "\\\""),
+                screenpipe_dir
+                    .join("pipes")
+                    .join(pipe)
+                    .to_string_lossy()
+                    .replace('\\', "\\\\")
+                    .replace('\"', "\\\""),
+                if cfg!(target_os = "windows") {
+                    "windows"
+                } else {
+                    "unix"
+                }
             ),
         )?;
 
@@ -362,7 +382,6 @@ mod pipes {
         }
     }
 
-    #[allow(clippy::manual_async_fn)]
     pub async fn run_pipe(pipe: String, screenpipe_dir: PathBuf) -> anyhow::Result<()> {
         debug!(
             "Running pipe: {}, screenpipe_dir: {}",
@@ -392,6 +411,8 @@ mod pipes {
 
         let main_module = find_pipe_file(&pipe_dir)?;
 
+        info!("Executing pipe: {:?}", main_module);
+
         match run_js(&pipe, &main_module.to_string_lossy(), screenpipe_dir).await {
             Ok(_) => info!("JS execution completed successfully"),
             Err(error) => {
@@ -417,12 +438,6 @@ mod pipes {
                         Path::new(&api_url).file_name().unwrap().to_str().unwrap(),
                     );
                     download_github_folder(&client, &api_url, screenpipe_dir, &pipe_name).await
-                }
-                Some("raw.githubusercontent.com") => {
-                    let pipe_name = sanitize_pipe_name(
-                        Path::new(source).file_name().unwrap().to_str().unwrap(),
-                    );
-                    download_single_file(&client, source, screenpipe_dir, &pipe_name).await
                 }
                 _ => anyhow::bail!("Unsupported URL format"),
             }
@@ -453,26 +468,42 @@ mod pipes {
     }
 
     async fn copy_local_folder(src: &Path, dst: &Path) -> anyhow::Result<()> {
+        let mut pipe_json: Value = serde_json::json!({});
+        let pipe_json_path = dst.join("pipe.json");
+
         for entry in std::fs::read_dir(src)? {
             let entry = entry?;
             let file_type = entry.file_type()?;
             let file_name = entry.file_name();
 
             if file_type.is_file() {
-                if file_name
-                    .to_str()
-                    .map(|s| s.ends_with(".ts") || s.ends_with(".js") || s == "pipe.json")
-                    .unwrap_or(false)
-                {
-                    let src_path = entry.path();
-                    let dst_path = dst.join(file_name);
-                    tokio::fs::copy(&src_path, &dst_path).await?;
-                    info!("Copied: {:?} to {:?}", src_path, dst_path);
+                if let Some(file_name_str) = file_name.clone().to_str() {
+                    if file_name_str == "pipe.js"
+                        || file_name_str == "pipe.ts"
+                        || file_name_str == "pipe.json"
+                        || file_name_str == "README.md"
+                    {
+                        let src_path = entry.path();
+                        let dst_path = dst.join(file_name);
+                        tokio::fs::copy(&src_path, &dst_path).await?;
+                        info!("Copied: {:?} to {:?}", src_path, dst_path);
+
+                        if file_name_str == "pipe.json" {
+                            let content = tokio::fs::read_to_string(&dst_path).await?;
+                            pipe_json = serde_json::from_str(&content)?;
+                        }
+                    }
                 }
-            } else if file_type.is_dir() {
-                // Optionally handle subdirectories if needed
             }
         }
+
+        // Update pipe.json with the local source path at the root level
+        // pipe_json["source"] = serde_json::json!(src.to_string_lossy().to_string());
+
+        // Write updated pipe.json
+        tokio::fs::write(&pipe_json_path, serde_json::to_string_pretty(&pipe_json)?).await?;
+        info!("Updated pipe.json with local source path");
+
         Ok(())
     }
 
@@ -505,50 +536,34 @@ mod pipes {
 
         tokio::fs::create_dir_all(&pipe_dir).await?;
 
+        let mut pipe_json: Value = serde_json::json!({});
+
         for item in contents.as_array().unwrap() {
             let file_name = item["name"].as_str().unwrap();
-            if file_name.ends_with(".ts") || file_name.ends_with(".js") || file_name == "pipe.json"
-            {
-                if file_name.starts_with("main")
-                    || file_name.starts_with("pipe")
-                    || file_name == "pipe.json"
-                {
-                    let download_url = item["download_url"].as_str().unwrap();
-                    let file_content = client.get(download_url).send().await?.bytes().await?;
-                    let file_path = pipe_dir.join(file_name);
-                    tokio::fs::write(&file_path, &file_content).await?;
-                    info!("Downloaded: {:?}", file_path);
+            let download_url = item["download_url"].as_str().unwrap();
+
+            if file_name == "pipe.js" || file_name == "pipe.ts" || file_name == "pipe.json" || file_name == "README.md" {
+                let file_content = client.get(download_url).send().await?.bytes().await?;
+                let file_path = pipe_dir.join(file_name);
+                tokio::fs::write(&file_path, &file_content).await?;
+                info!("Downloaded: {:?}", file_path);
+
+                if file_name == "pipe.json" {
+                    pipe_json = serde_json::from_slice(&file_content)?;
                 }
             }
         }
 
+        // Update pipe.json with the original GitHub URL at the root level
+        // let github_url = api_url_to_github_url(api_url);
+        // pipe_json["source"] = serde_json::json!(github_url);
+
+        // Write updated pipe.json
+        let pipe_json_path = pipe_dir.join("pipe.json");
+        tokio::fs::write(&pipe_json_path, serde_json::to_string_pretty(&pipe_json)?).await?;
+        info!("updated pipe.json with source url");
+
         info!("Pipe downloaded successfully to: {:?}", pipe_dir);
-        Ok(pipe_dir)
-    }
-
-    async fn download_single_file(
-        client: &Client,
-        url: &str,
-        screenpipe_dir: PathBuf,
-        pipe_name: &str,
-    ) -> anyhow::Result<PathBuf> {
-        let response = client.get(url).send().await?;
-        let content = response.bytes().await?;
-
-        let pipe_dir = screenpipe_dir.join("pipes").join(pipe_name);
-
-        // Check if the pipe directory already exists
-        if pipe_dir.exists() {
-            info!("Pipe already exists: {:?}", pipe_dir);
-            return Ok(pipe_dir);
-        }
-
-        tokio::fs::create_dir_all(&pipe_dir).await?;
-
-        let file_path = pipe_dir.join(pipe_name);
-        tokio::fs::write(&file_path, &content).await?;
-
-        info!("Downloaded single file: {:?}", file_path);
         Ok(pipe_dir)
     }
 
@@ -581,13 +596,11 @@ mod pipes {
             let entry = entry?;
             let file_name = entry.file_name();
             let file_name_str = file_name.to_str().unwrap();
-            if (file_name_str.starts_with("pipe") || file_name_str.starts_with("main"))
-                && (file_name_str.ends_with(".ts") || file_name_str.ends_with(".js"))
-            {
+            if file_name_str == "pipe.js" || file_name_str == "pipe.ts" {
                 return Ok(entry.path());
             }
         }
-        anyhow::bail!("No pipe.ts, pipe.js, main.ts, or main.js found in the pipe directory")
+        anyhow::bail!("No pipe.js/pipe.ts found in the pipe/dist directory")
     }
 }
 

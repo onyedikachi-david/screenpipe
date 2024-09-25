@@ -1,0 +1,200 @@
+import MotionDiv from '../../components/motion-div'
+
+# getting started
+
+<MotionDiv>
+
+screenpipe offers multiple installation methods depending on user needs and technical proficiency. whether you are a developer looking to use the cli or a user who wants a more plug-and-play desktop app, screenpipe provides flexible options to get started quickly.
+
+</MotionDiv>
+
+<MotionDiv delay={0.3}>
+
+## 1. installation options
+
+### cli installation
+
+- **for technical users**: screenpipe can be installed and used via the command-line interface (cli).
+- **instructions**:
+  1. clone the repository.
+  2. install dependencies (ensure rust, cargo, and any other required tools are installed).
+  3. build the project and run the cli.
+
+</MotionDiv>
+
+<MotionDiv delay={0.5}>
+
+### desktop app
+
+- **paid desktop app**: offers priority support, 1-year updates, and exclusive features. users can download and install the desktop app directly from the official site.
+- **free desktop app**: open-source and available to build yourself. installation requires building from the source code or sending a pr to the repository. both options provide a fully functional desktop application with all key features.
+
+</MotionDiv>
+
+<MotionDiv delay={0.7}>
+
+### manual build
+
+for users preferring full control or customization, building the app manually from the repository is an option. this method requires rust and other necessary dependencies. follow the provided build guide to compile the app.
+
+</MotionDiv>
+
+---
+
+## macos installation
+
+<MotionDiv delay={1.2}>
+
+### **option 1: homebrew installation (recommended)**
+
+1. to install screenpipe using homebrew, simply execute the following commands:
+   ```bash
+   brew tap mediar-ai/screenpipe https://github.com/mediar-ai/screenpipe.git
+   brew install screenpipe
+   ```
+
+2. once installed, run screenpipe with the following:
+   ```bash
+   screenpipe
+   ```
+
+3. optional flags:
+   ```bash
+   screenpipe -h
+   ```
+
+
+if you require additional configurations such as running in debug mode or switching to webrtc for audio processing, you can refer to the official [screenpipe cli documentation](https://github.com/mediar-ai/screenpipe).
+
+</MotionDiv>
+
+<MotionDiv delay={1.5}>
+
+### **option 2: build from source (for advanced users)**
+
+1. start by installing rust and all necessary dependencies:
+   ```bash
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   brew install pkg-config ffmpeg jq tesseract
+   ```
+
+2. clone the screenpipe repository:
+   ```bash
+   git clone https://github.com/mediar-ai/screenpipe
+   cd screenpipe
+   ```
+
+3. build the project with:
+   ```bash
+   cargo build --release --features metal
+   ```
+
+4. finally, run screenpipe:
+   ```bash
+   ./target/release/screenpipe
+   ```
+
+[need help? open an issue on github.](https://github.com/mediar-ai/screenpipe/issues/new)
+
+</MotionDiv>
+
+---
+
+## windows installation (experimental)
+
+<MotionDiv delay={1.7}>
+
+### **steps to install on windows**
+
+> This is experimental support for Windows build. This assumes you already have the CUDA Toolkit installed and the CUDA_PATH set to my CUDA v12.6 folder.
+> Replace `V:\projects` and `V:\packages` with your own folders.
+
+If this does not work for you, please [open an issue](https://github.com/mediar-ai/screenpipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=windows+install+screenpipe+didnt+work) or get the pre-built [desktop app](https://screenpi.pe)
+
+- Install chocolatey
+- Install git
+- Install CUDA Toolkit (if using NVIDIA and building with cuda)
+- Install MS Visual Studio Build Tools (below are the components I have installed)
+	- Desktop development with C++
+		- MSVC v143
+		- Windows 11 SDK
+		- C++ Cmake tools for Windows
+		- Testing tools core features - Build tools
+		- C++ AddressSanitizer
+		- C++ ATL for latest v143
+	- Individual components
+		- C++ ATL for latest v143 build tools (x86 & x64)
+		- MSBuild support for LLVM (clang-c) toolset
+		- C++ Clang Compiler for Windows
+
+```batch
+choco install pkgconfiglite rust
+cd V:\projects
+git clone https://github.com/mediar-ai/screenpipe
+cd V:\packages
+git clone https://github.com/microsoft/vcpkg.git
+cd vcpkg
+bootstrap-vcpkg.bat -disableMetrics
+vcpkg.exe integrate install --disable-metrics
+vcpkg.exe install ffmpeg
+
+SET PKG_CONFIG_PATH=V:\packages\vcpkg\packages\ffmpeg_x64-windows\lib\pkgconfig
+SET VCPKG_ROOT=V:\packages\vcpkg
+SET LIBCLANG_PATH=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin
+cd V:\projects\screen-pipe
+
+cargo build --release --features cuda
+```
+
+</MotionDiv>
+
+---
+<MotionDiv delay={2.0}>
+## linux installation
+
+### **option 1: build from source**
+
+1. install dependencies with the following commands:
+   ```bash
+   sudo apt-get install -y libavformat-dev libavfilter-dev libavdevice-dev ffmpeg tesseract-ocr libtesseract-dev
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   ```
+
+2. clone the repository and build the application:
+   ```bash
+   git clone https://github.com/mediar-ai/screenpipe
+   cd screenpipe
+   cargo build --release
+   ```
+
+3. to run the application, use:
+   ```bash
+   ./target/release/screenpipe
+   ```
+
+</MotionDiv>
+
+<MotionDiv delay={2.3}>
+
+### **option 2: install via nix**
+
+screenpipe can be easily installed on nix-based systems. follow the instructions below:
+
+1. run in a nix shell:
+   ```bash
+   nix-shell -p screen-pipe
+   ```
+
+2. or add it to your system packages:
+   ```nix
+   environment.systemPackages = with pkgs; [
+     screen-pipe
+   ];
+   ```
+
+after editing the configuration, rebuild your system using:
+   ```bash
+   sudo nixos-rebuild switch
+   ```
+
+</MotionDiv>

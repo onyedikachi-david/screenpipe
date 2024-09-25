@@ -164,5 +164,3 @@ Abort trap: 6
 
   We recommend using [TablePlus](https://tableplus.com/) to open the SQLite database located alongside the data. 
 </details>
-
-

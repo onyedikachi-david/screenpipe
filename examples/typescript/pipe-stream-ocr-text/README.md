@@ -42,14 +42,13 @@ we run deno runtime (a JS/TS engine) within the rust code, which host your pipes
 if you're in dev mode you can run the cli like this:
 
 ```bash
-curl -X POST "http://localhost:3030/pipes/download" \
-     -H "Content-Type: application/json" \
-     -d '{"url": "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text"}' | jq
+screenpipe pipe download https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text
+screenpipe pipe enable pipe-stream-ocr-text
 ```
 
-this would download the pip in your local files 
+this would download the pipe in your local files and enable it
 
-check `server.rs` to see how it works (copy paste in AI and ask questions)
+then you need to restart screenpipe backend
 
 ### get featured in the pipe store
 
@@ -60,7 +59,6 @@ just ask @louis030195
 ### what's next for pipes
 
 - use dependencies (like vercel/ai so cool)
-- TS
-- access to screenpipe desktop api (e.g. trigger notifications, customise what cursor-like @ are in the chat, etc.)
+- access to screenpipe desktop api (control your computer, embedded LLM, better UI feedback API, etc.)
 - easier to publish your pipes (like obsidian store)
 - everything frictionless, effortless, and maximize the value you get out of screenpipe
