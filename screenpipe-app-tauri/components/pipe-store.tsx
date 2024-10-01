@@ -15,23 +15,25 @@ import { MemoizedReactMarkdown } from "@/components/markdown";
 import { CodeBlock } from "@/components/ui/codeblock";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { useSettings } from "@/lib/hooks/use-settings";
-import { invoke } from "@tauri-apps/api/core";
 import { toast } from "./ui/use-toast";
 import { Input } from "./ui/input";
-import { Download, Plus, Trash2, ExternalLink } from "lucide-react";
+import {
+  Download,
+  Plus,
+  Trash2,
+  ExternalLink,
+  FolderOpen,
+  RefreshCw,
+  Power,
+  Link,
+  Heart,
+  Puzzle,
+} from "lucide-react";
 import { PipeConfigForm } from "./pipe-config-form";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import posthog from "posthog-js";
-const formatDate = (dateString: string) => {
-  const date = new Date(dateString);
-  return date.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-};
-
+import { open } from "@tauri-apps/plugin-dialog";
+import { Command, open as openUrl } from "@tauri-apps/plugin-shell";
 import {
   Tooltip,
   TooltipContent,
@@ -41,6 +43,12 @@ import {
 import { readFile } from "@tauri-apps/plugin-fs";
 import { homeDir, join } from "@tauri-apps/api/path";
 import { convertHtmlToMarkdown } from "@/lib/utils";
+import LogViewer from "./log-viewer-v2";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 export interface Pipe {
   enabled: boolean;
@@ -58,35 +66,43 @@ interface CorePipe {
 
 const corePipes: CorePipe[] = [
   {
+    id: "pipe-meeting-summary-by-email",
+    description:
+      "send you regular emails summarizing your meetings using ollama+llama3.2",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-meeting-summary-by-email",
+  },
+  {
     id: "pipe-phi3.5-engineering-team-logs",
-    description: "continuously write logs of your days in a notion table using ollama+phi3.5",
+    description:
+      "continuously write logs of your days in a notion table using ollama+llama3.2",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-phi3.5-engineering-team-logs",
   },
-  // {
-  //   id: "transcriber",
-  //   description: "generate accurate transcriptions",
-  //   url: "https://github.com/screenpipe/transcriber-pipe",
-  // },
+  {
+    id: "pipe-email-daily-log",
+    description:
+      "send a daily log of your screen time to your email using ollama+llama3.2",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-email-daily-log",
+  },
 ];
 
 const PipeDialog: React.FC = () => {
   const [newRepoUrl, setNewRepoUrl] = useState("");
   const [selectedPipe, setSelectedPipe] = useState<Pipe | null>(null);
   const [pipes, setPipes] = useState<Pipe[]>([]);
-  const { settings, updateSettings } = useSettings();
   const { health } = useHealthCheck();
+  const [isLogOpen, setIsLogOpen] = useState(false);
+
   useEffect(() => {
     fetchInstalledPipes();
   }, [health?.status]);
 
   const handleResetAllPipes = async () => {
     try {
-      // stop screenpipe
-      if (!settings?.devMode) {
-        await invoke("kill_all_sreenpipes");
-      }
       // reset pipes
-      await invoke("reset_all_pipes");
+      // await invoke("reset_all_pipes");
+      // instead use screenpipe pipe purge -y
+      const cmd = Command.sidecar("screenpipe", ["pipe", "purge", "-y"]);
+      await cmd.execute();
       await new Promise((resolve) => setTimeout(resolve, 1000));
       toast({
         title: "All pipes deleted",
@@ -105,13 +121,9 @@ const PipeDialog: React.FC = () => {
     } finally {
       setSelectedPipe(null);
       setPipes([]);
-      // start screenpipe
-      if (!settings?.devMode) {
-        await invoke("spawn_screenpipe");
-      }
     }
   };
-  console.log("pipes", pipes);
+  // console.log("pipes", pipes);
   const fetchInstalledPipes = async () => {
     if (!health || health?.status === "error") {
       return;
@@ -134,11 +146,23 @@ const PipeDialog: React.FC = () => {
           pipe.id,
           "README.md"
         );
-        const readme = await readFile(pathToReadme);
-        const readmeString = new TextDecoder().decode(readme);
-        pipe.fullDescription = convertHtmlToMarkdown(readmeString);
+        try {
+          const readme = await readFile(pathToReadme);
+          const readmeString = new TextDecoder().decode(readme);
+          pipe.fullDescription = convertHtmlToMarkdown(readmeString);
+        } catch (error) {
+          console.warn(`no readme found for pipe ${pipe.id}`);
+          pipe.fullDescription = "no description available for this pipe.";
+        }
       }
       setPipes(data);
+      // Update selectedPipe if it exists in the new data
+      if (selectedPipe) {
+        const updatedSelectedPipe = data.find(
+          (pipe: Pipe) => pipe.id === selectedPipe.id
+        );
+        setSelectedPipe(updatedSelectedPipe || null);
+      }
     } catch (error) {
       console.error("Error fetching installed pipes:", error);
       toast({
@@ -290,6 +314,27 @@ const PipeDialog: React.FC = () => {
     }
   };
 
+  const handleLoadFromLocalFolder = async () => {
+    try {
+      const selectedFolder = await open({
+        directory: true,
+        multiple: false,
+      });
+
+      if (selectedFolder) {
+        // set in the bar
+        setNewRepoUrl(selectedFolder);
+      }
+    } catch (error) {
+      console.error("failed to load pipe from local folder:", error);
+      toast({
+        title: "error loading pipe",
+        description: "please try again or check the logs for more information.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleConfigSave = async (config: Record<string, any>) => {
     if (selectedPipe) {
       fetch(`http://localhost:3030/pipes/update`, {
@@ -304,14 +349,6 @@ const PipeDialog: React.FC = () => {
         description: "The pipe configuration has been updated.",
       });
     }
-  };
-
-  const formatUpdatedTime = (date: string) => {
-    const now = new Date();
-    const updated = new Date(date);
-    const diffTime = Math.abs(now.getTime() - updated.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
   };
 
   const renderPipeContent = () => {
@@ -335,18 +372,6 @@ const PipeDialog: React.FC = () => {
     return (
       <>
         <h2 className="text-2xl font-bold mb-2">{selectedPipe.id}</h2>
-        <div className="flex justify-between items-center mb-4">
-          <div>
-            <a
-              href={selectedPipe.source}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline"
-            >
-              repository
-            </a>
-          </div>
-        </div>
 
         <div className="flex space-x-2 mb-4">
           <Button
@@ -354,31 +379,75 @@ const PipeDialog: React.FC = () => {
             variant={selectedPipe.enabled ? "default" : "outline"}
             disabled={health?.status === "error"}
           >
+            <Power className="mr-2 h-4 w-4" />
             {selectedPipe.enabled ? "disable" : "enable"}
           </Button>
 
-          <Button disabled variant="outline">
-            copy share link
-            <Badge variant="secondary" className="ml-2">
-              soon
-            </Badge>
-          </Button>
-          <Button disabled variant="outline">
-            donate
-            <Badge variant="secondary" className="ml-2">
-              soon
-            </Badge>
+          {!selectedPipe.source.startsWith("https://") && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={() => handleRefreshFromDisk(selectedPipe)}
+                    variant="outline"
+                  >
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    refresh
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>refresh the code from your local disk</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
+          {selectedPipe.source.startsWith("http") && (
+            <Button
+              onClick={() => openUrl(selectedPipe.source, "_blank")}
+              variant="outline"
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              view source
+            </Button>
+          )}
+          <Button
+            onClick={() =>
+              openUrl(
+                "https://twitter.com/intent/tweet?text=here's%20how%20i%20use%20@screen_pipe%20...%20%5Bscreenshot%5D%20an%20awesome%20tool%20for%20..."
+              )
+            }
+            variant="outline"
+          >
+            <Heart className="mr-2 h-4 w-4" />
+            support us
           </Button>
         </div>
         <Separator className="my-4" />
 
         {selectedPipe.enabled && (
           <>
+            <Collapsible
+              open={isLogOpen}
+              onOpenChange={setIsLogOpen}
+              className="w-full mt-4"
+            >
+              <div className="flex items-center justify-between w-full">
+                <CollapsibleTrigger className="flex items-center justify-between p-2 flex-grow border-b border-gray-200">
+                  screenpipe logs
+                  <span>{isLogOpen ? "▲" : "▼"}</span>
+                </CollapsibleTrigger>
+              </div>
+              <CollapsibleContent>
+                <LogViewer className="mt-2" />
+              </CollapsibleContent>
+            </Collapsible>
+            <Separator className="my-4" />
+
             <PipeConfigForm
               pipe={selectedPipe}
               onConfigSave={handleConfigSave}
             />
-            <Separator className="my-4" />
           </>
         )}
 
@@ -416,7 +485,59 @@ const PipeDialog: React.FC = () => {
                     />
                   );
                 },
+                a({ href, children }) {
+                  const isDirectVideo =
+                    href?.match(/\.(mp4|webm|ogg)$/) ||
+                    href?.includes("user-attachments/assets");
+                  const youtubeMatch = href?.match(
+                    /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(.+)/
+                  );
+
+                  if (isDirectVideo) {
+                    return (
+                      <video
+                        src={href}
+                        controls
+                        className="max-w-full h-auto"
+                        style={{ maxHeight: "400px" }}
+                      >
+                        your browser does not support the video tag.
+                      </video>
+                    );
+                  } else if (youtubeMatch) {
+                    const videoId = youtubeMatch[1];
+                    return (
+                      <iframe
+                        width="100%"
+                        height="315"
+                        src={`https://www.youtube.com/embed/${videoId}`}
+                        frameBorder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="max-w-full"
+                        style={{ maxHeight: "400px" }}
+                      ></iframe>
+                    );
+                  }
+
+                  return (
+                    <a href={href} target="_blank" rel="noopener noreferrer">
+                      {children}
+                    </a>
+                  );
+                },
+                video({ src }) {
+                  console.log("vid", src);
+                  return (
+                    <video
+                      src={src}
+                      className="max-w-full h-auto"
+                      style={{ maxHeight: "400px" }}
+                    />
+                  );
+                },
                 img({ src, alt }) {
+                  console.log("img", src);
                   return (
                     <img
                       src={src}
@@ -438,6 +559,43 @@ const PipeDialog: React.FC = () => {
         )}
       </>
     );
+  };
+
+  // Add this function to handle refreshing from disk
+  const handleRefreshFromDisk = async (pipe: Pipe) => {
+    try {
+      posthog.capture("refresh_pipe_from_disk", {
+        pipe_id: pipe.id,
+      });
+      toast({
+        title: "refreshing pipe",
+        description: "please wait...",
+      });
+      const response = await fetch(`http://localhost:3030/pipes/download`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url: pipe.source }),
+      });
+      if (!response.ok) {
+        throw new Error("failed to refresh pipe");
+      }
+      await fetchInstalledPipes();
+      toast({
+        title: "pipe refreshed",
+        description: "the pipe has been successfully refreshed from disk.",
+      });
+    } catch (error) {
+      console.error("failed to refresh pipe from disk:", error);
+      toast({
+        title: "error refreshing pipe",
+        description: "please try again or check the logs for more information.",
+        variant: "destructive",
+      });
+    } finally {
+      setSelectedPipe(null);
+    }
   };
 
   const renderCorePipes = () => (
@@ -509,6 +667,14 @@ const PipeDialog: React.FC = () => {
                 <Plus className="mr-2" size={16} />
                 add your own pipe
               </Button>
+              <Button
+                className="mt-2 w-full"
+                onClick={handleLoadFromLocalFolder}
+                variant="outline"
+              >
+                <FolderOpen className="mr-2" size={16} />
+                load from local folder
+              </Button>
             </Card>
           </div>
           <div className="w-full pl-4 border-l overflow-y-auto">
@@ -522,7 +688,10 @@ const PipeDialog: React.FC = () => {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="ghost">pipe store</Button>
+        <Button variant="ghost">
+          <Puzzle className="mr-2 h-4 w-4" />
+          pipe store
+        </Button>
       </DialogTrigger>
       <DialogContent className="max-w-[90vw] w-full max-h-[90vh] h-full ">
         <DialogHeader>
@@ -572,27 +741,7 @@ const PipeDialog: React.FC = () => {
               read the docs
             </a>
           </DialogDescription>
-
-          {/* {selectedPipe && <FeatureRequestLink className="w-80" />} */}
         </DialogHeader>
-        {/* center message in big */}
-        {/* <div className="flex flex-col justify-center items-center h-[500px]">
-          <p className="text-center">
-            currently you need to enable pipes through `screenpipe pipe`
-            commands or `/pipes` api
-            <br />
-            we&apos;re going to make this nontechnical next week.
-          </p>
-          <br />
-          <a
-            href="https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript"
-            className="text-blue-500 hover:underline"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            check out more examples on github
-          </a>
-        </div> */}
         {renderContent()}
       </DialogContent>
     </Dialog>

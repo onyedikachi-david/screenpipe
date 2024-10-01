@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useEffect, useState } from "react";
 import { Label } from "@/components/ui/label";
 import {
@@ -18,7 +20,7 @@ import {
   Monitor,
   X,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getCliPath } from "@/lib/utils";
 import {
   Command,
   CommandInput,
@@ -46,6 +48,18 @@ import {
 import { Switch } from "./ui/switch";
 import { Input } from "./ui/input";
 import { Slider } from "./ui/slider";
+import { IconCode } from "./ui/icons";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import { CodeBlock } from "./ui/codeblock";
+import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
+import { platform } from "@tauri-apps/plugin-os";
 
 interface AudioDevice {
   name: string;
@@ -63,11 +77,9 @@ interface MonitorDevice {
 export function RecordingSettings({
   localSettings,
   setLocalSettings,
-  currentPlatform,
 }: {
   localSettings: Settings;
   setLocalSettings: (settings: Settings) => void;
-  currentPlatform: string;
 }) {
   const { settings, updateSettings } = useSettings();
   const [openAudioDevices, setOpenAudioDevices] = React.useState(false);
@@ -83,9 +95,9 @@ export function RecordingSettings({
   const [isUpdating, setIsUpdating] = useState(false);
   const { health } = useHealthCheck();
   const isDisabled = health?.status_code === 500;
-  console.log("localSettings", localSettings);
-  console.log("settings", settings);
-  console.log("availableMonitors", availableMonitors);
+  const [isCopyDialogOpen, setIsCopyDialogOpen] = useState(false);
+  const { copyToClipboard } = useCopyToClipboard({ timeout: 2000 });
+
   useEffect(() => {
     const loadDevices = async () => {
       try {
@@ -115,38 +127,57 @@ export function RecordingSettings({
         setAvailableAudioDevices(audioDevices);
 
         console.log("localSettings", localSettings);
-        // Update local settings if current values are default
+
+        // Update monitors
+        const availableMonitorIds = monitors.map((monitor) =>
+          monitor.id.toString()
+        );
+        let updatedMonitorIds = localSettings.monitorIds.filter((id) =>
+          availableMonitorIds.includes(id)
+        );
+
         if (
-          localSettings.monitorIds.length === 1 &&
-          localSettings.monitorIds[0] === "default" &&
-          monitors.length > 0
+          updatedMonitorIds.length === 0 ||
+          (localSettings.monitorIds.length === 1 &&
+            localSettings.monitorIds[0] === "default" &&
+            monitors.length > 0)
         ) {
-          setLocalSettings({
-            ...localSettings,
-            monitorIds: [
-              monitors.find((monitor) => monitor.is_default)!.id!.toString(),
-            ],
-          });
+          updatedMonitorIds = [
+            monitors.find((monitor) => monitor.is_default)!.id!.toString(),
+          ];
         }
+
+        // Update audio devices
+        const availableAudioDeviceNames = audioDevices.map(
+          (device) => device.name
+        );
+        let updatedAudioDevices = localSettings.audioDevices.filter((device) =>
+          availableAudioDeviceNames.includes(device)
+        );
+
         if (
-          localSettings.audioDevices.length === 1 &&
-          localSettings.audioDevices[0] === "default" &&
-          audioDevices.length > 0
+          updatedAudioDevices.length === 0 ||
+          (localSettings.audioDevices.length === 1 &&
+            localSettings.audioDevices[0] === "default" &&
+            audioDevices.length > 0)
         ) {
-          setLocalSettings({
-            ...localSettings,
-            audioDevices: audioDevices
-              .filter((device) => device.is_default)
-              .map((device) => device.name),
-          });
+          updatedAudioDevices = audioDevices
+            .filter((device) => device.is_default)
+            .map((device) => device.name);
         }
+
+        setLocalSettings({
+          ...localSettings,
+          monitorIds: updatedMonitorIds,
+          audioDevices: updatedAudioDevices,
+        });
       } catch (error) {
         console.error("Failed to load devices:", error);
       }
     };
 
     loadDevices();
-  }, [localSettings, setLocalSettings]);
+  }, [settings]);
 
   const handleUpdate = async () => {
     setIsUpdating(true);
@@ -171,6 +202,7 @@ export function RecordingSettings({
         deepgramApiKey: localSettings.deepgramApiKey,
         fps: localSettings.fps,
         vadSensitivity: localSettings.vadSensitivity,
+        audioChunkDuration: localSettings.audioChunkDuration,
       };
       console.log("Settings to update:", settingsToUpdate);
       await updateSettings(settingsToUpdate);
@@ -272,7 +304,6 @@ export function RecordingSettings({
     setLocalSettings({ ...localSettings, fps: value[0] });
   };
 
-
   const handleVadSensitivityChange = (value: number[]) => {
     const sensitivityMap: { [key: number]: VadSensitivity } = {
       2: "high",
@@ -294,6 +325,99 @@ export function RecordingSettings({
     return sensitivityMap[sensitivity];
   };
 
+  const handleAudioChunkDurationChange = (value: number[]) => {
+    setLocalSettings({ ...localSettings, audioChunkDuration: value[0] });
+  };
+
+  const generateCliCommand = () => {
+    const cliPath = getCliPath();
+    let args = [];
+
+    if (localSettings.audioTranscriptionEngine !== "default") {
+      args.push(
+        `--audio-transcription-engine ${localSettings.audioTranscriptionEngine}`
+      );
+    }
+    if (localSettings.ocrEngine !== "default") {
+      args.push(`--ocr-engine ${localSettings.ocrEngine}`);
+    }
+    if (
+      localSettings.monitorIds.length > 0 &&
+      localSettings.monitorIds[0] !== "default"
+    ) {
+      localSettings.monitorIds.forEach((id) => args.push(`--monitor-id ${id}`));
+    }
+    if (
+      localSettings.audioDevices.length > 0 &&
+      localSettings.audioDevices[0] !== "default"
+    ) {
+      localSettings.audioDevices.forEach((device) =>
+        args.push(`--audio-device "${device}"`)
+      );
+    }
+    if (localSettings.usePiiRemoval) {
+      args.push("--use-pii-removal");
+    }
+    if (localSettings.restartInterval > 0) {
+      args.push(`--restart-interval ${localSettings.restartInterval}`);
+    }
+    if (localSettings.disableAudio) {
+      args.push("--disable-audio");
+    }
+    localSettings.ignoredWindows.forEach((window) =>
+      args.push(`--ignored-windows "${window}"`)
+    );
+    localSettings.includedWindows.forEach((window) =>
+      args.push(`--included-windows "${window}"`)
+    );
+    if (
+      localSettings.deepgramApiKey &&
+      localSettings.deepgramApiKey !== "default"
+    ) {
+      args.push(`--deepgram-api-key "${localSettings.deepgramApiKey}"`);
+    }
+    if (localSettings.fps !== 0.2) {
+      args.push(`--fps ${localSettings.fps}`);
+    }
+    if (localSettings.vadSensitivity !== "high") {
+      args.push(`--vad-sensitivity ${localSettings.vadSensitivity}`);
+    }
+
+    return `${cliPath} ${args.join(" ")}`;
+  };
+
+  const handleCopyCliCommand = () => {
+    const command = generateCliCommand();
+    copyToClipboard(command);
+    toast({
+      title: "CLI command copied",
+      description: "The CLI command has been copied to your clipboard.",
+    });
+  };
+
+  const renderOcrEngineOptions = () => {
+    const currentPlatform = platform();
+    return (
+      <>
+        {/* <SelectItem value="unstructured">
+          <div className="flex items-center justify-between w-full space-x-2">
+            <span>unstructured</span>
+            <Badge variant="secondary">cloud</Badge>
+          </div>
+        </SelectItem> */}
+        {currentPlatform === "linux" && (
+          <SelectItem value="tesseract">tesseract</SelectItem>
+        )}
+        {currentPlatform === "windows" && (
+          <SelectItem value="windows-native">windows native</SelectItem>
+        )}
+        {currentPlatform === "macos" && (
+          <SelectItem value="apple-native">apple native</SelectItem>
+        )}
+      </>
+    );
+  };
+
   return (
     <>
       <div className="relative">
@@ -309,7 +433,16 @@ export function RecordingSettings({
         )}
         <Card className={cn(isDisabled && "opacity-50 pointer-events-none")}>
           <CardHeader>
-            <CardTitle className="text-center">recording settings</CardTitle>
+            <div className="flex justify-between items-center">
+              <CardTitle className="text-center">recording settings</CardTitle>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setIsCopyDialogOpen(true)}
+              >
+                <IconCode className="h-4 w-4" />
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-col space-y-2">
@@ -352,25 +485,7 @@ export function RecordingSettings({
                 <SelectTrigger>
                   <SelectValue placeholder="select ocr engine" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unstructured">
-                    <div className="flex items-center justify-between w-full space-x-2">
-                      <span>unstructured</span>
-                      <Badge variant="secondary">cloud</Badge>
-                    </div>
-                  </SelectItem>
-                  {currentPlatform !== "macos" && (
-                    <SelectItem value="tesseract">tesseract</SelectItem>
-                  )}
-                  {currentPlatform === "windows" && (
-                    <SelectItem value="windows-native">
-                      windows native
-                    </SelectItem>
-                  )}
-                  {currentPlatform === "macos" && (
-                    <SelectItem value="apple-native">apple native</SelectItem>
-                  )}
-                </SelectContent>
+                <SelectContent>{renderOcrEngineOptions()}</SelectContent>
               </Select>
             </div>
 
@@ -830,6 +945,49 @@ export function RecordingSettings({
             </div>
 
             <div className="flex flex-col space-y-2">
+              <Label
+                htmlFor="audioChunkDuration"
+                className="flex items-center space-x-2"
+              >
+                <span>audio chunk duration (seconds)</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <HelpCircle className="h-4 w-4 cursor-default" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>
+                        adjust the duration of each audio chunk.
+                        <br />
+                        shorter durations may lower resource usage spikes,
+                        <br />
+                        while longer durations may increase transcription
+                        quality.
+                        <br />
+                        deepgram in general works better than whisper if you
+                        want higher quality transcription.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <div className="flex items-center space-x-4">
+                <Slider
+                  id="audioChunkDuration"
+                  min={5}
+                  max={3000}
+                  step={1}
+                  value={[localSettings.audioChunkDuration]}
+                  onValueChange={handleAudioChunkDurationChange}
+                  className="flex-grow"
+                />
+                <span className="w-12 text-right">
+                  {localSettings.audioChunkDuration} s
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col space-y-2">
               <Button
                 onClick={handleUpdate}
                 disabled={settings.devMode || isUpdating}
@@ -847,6 +1005,23 @@ export function RecordingSettings({
           </CardContent>
         </Card>
       </div>
+      <Dialog open={isCopyDialogOpen} onOpenChange={setIsCopyDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>CLI command</DialogTitle>
+            <DialogDescription>
+              You can use this CLI command to start Screenpipe with the current
+              settings.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-x-auto">
+            <CodeBlock language="bash" value={generateCliCommand()} />
+          </div>
+          <DialogFooter>
+            <Button onClick={handleCopyCliCommand}>Copy to Clipboard</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

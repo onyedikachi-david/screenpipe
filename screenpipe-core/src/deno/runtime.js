@@ -34,13 +34,17 @@ const sendLog = async (level, ...args) => {
 
 const console = {
     log: (...args) => {
-        core.print(`[js][info]: ${argsToMessage(...args)}\n`, false);
+        core.print(`[pipe][${globalThis.metadata.id}][info]: ${argsToMessage(...args)}\n`, false);
         // sendLog("info", ...args);
     },
     error: (...args) => {
-        core.print(`[js][error]: ${argsToMessage(...args)}\n`, true);
+        core.print(`[pipe][${globalThis.metadata.id}][error]: ${argsToMessage(...args)}\n`, true);
         // sendLog("error", ...args);
     },
+    warn: (...args) => {
+        core.print(`[pipe][${globalThis.metadata.id}][warn]: ${argsToMessage(...args)}\n`, true);
+        // sendLog("warn", ...args);
+    }
 };
 
 globalThis.console = console;
@@ -142,28 +146,71 @@ const pipe = {
             return {};
         }
     },
+    sendEmail: async ({ to, from, password, subject, body, contentType = 'text/plain' }) => {
+        try {
+            await ops.op_send_email(to, from, password, subject, body, contentType);
+            return true;
+        } catch (error) {
+            console.error("Error sending email:", error);
+            return false;
+        }
+    },
     // isEnabled: async () => {
     //     return ops.op_is_enabled();
     // }
 };
 
-const fs = { // TODO does not work?
-    readFileSync: (path) => {
-        // This is a synchronous wrapper around the async operation
-        // Note: This will block the event loop and should be used carefully
-        return new Promise((resolve, reject) => {
-            ops.op_read_file(path)
-                .then(resolve)
-                .catch(reject);
-        });
+function encodeQueryData(data) {
+    return Object.keys(data)
+        .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(data[key])}`)
+        .join('&');
+}
+
+pipe.queryScreenpipe = async (params) => {
+    try {
+        const queryParams = {
+            content_type: params.content_type || 'all',
+            limit: params.limit || 50,
+            offset: params.offset || 0,
+            start_time: params.start_time || new Date(Date.now() - 3600000).toISOString(),
+            end_time: params.end_time || new Date().toISOString(),
+            min_length: params.min_length || 50,
+            max_length: params.max_length || 10000,
+            include_frames: params.include_frames || false,
+        };
+
+        if (params.q) queryParams.q = params.q;
+        if (params.app_name) queryParams.app_name = params.app_name;
+        if (params.window_name) queryParams.window_name = params.window_name;
+
+        const queryString = encodeQueryData(queryParams);
+        const url = `http://localhost:3030/search?${queryString}`;
+        console.log("calling screenpipe", url);
+
+        const response = await pipe.fetch(url);
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(`http error! status: ${response.status} ${text}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("error querying screenpipe:", error);
+        return null;
+    }
+};
+
+const fs = {
+    readFile: async (path) => {
+        return await ops.op_read_file(path);
     },
-    writeFileSync: (path, contents) => {
-        // Similarly, this is a synchronous wrapper
-        return new Promise((resolve, reject) => {
-            ops.op_write_file(path, contents)
-                .then(resolve)
-                .catch(reject);
-        });
+    writeFile: async (path, contents) => {
+        return await ops.op_write_file(path, contents);
+    },
+    readdir: async (path) => {
+        return await ops.op_readdir(path);
+    },
+    mkdir: async (path) => {
+        return await ops.op_create_dir(path);
     }
 };
 
@@ -185,4 +232,3 @@ globalThis.pipe = pipe;
 globalThis.pipe.metadata = globalThis.metadata;
 globalThis.fetch = pipe.fetch;
 globalThis.loadConfig = pipe.loadConfig;
-

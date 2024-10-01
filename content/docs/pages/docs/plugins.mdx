@@ -59,25 +59,31 @@ this simple pipe will stream text to local markdown files in current directory.
 
 | **example**                          | **description**                                  | **link**                          |
 | ------------------------------------ | ------------------------------------------------ | --------------------------------- |
-| **pipe tagging activity**            | automatically tag activities using ai            | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-tagging-activity)                         |
+| **pipe email daily log**             | send daily activity logs via email               | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-email-daily-log)                         |
+| **pipe screen to crm**               | integrate screen data with crm systems           | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-screen-to-crm)                         |
+| **pipe phi3.5 engineering team logs**| generate engineering team work logs              | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-phi3.5-engineering-team-logs)                         |
 | **pipe stream ocr text**             | stream ocr text from screen data                 | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text)                         |
 | **pipe activity topic tracker**      | track and summarize activities                   | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-activity-topic-tracker)                         |
-| **pipe engineering team logs**       | view daily work logs                             | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-phi3.5-engineering-team-logs)                         |
+| **pipe focus notification buddy**    | help you stay focused                            | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-focus-notification-buddy)                         |
 | **pipe security check**              | notify user if detected any suspicious activity  | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-security-check)                         |
-| **pipe sync meetings to notion**     | sync meeting transcriptions & summaries to notion | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-sync-meetings-to-notion)                        |
-| **pipe focus notification buddy**     | help you stay focused                            | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-focus-notification-buddy)                         |
+| **pipe sync meetings to notion**     | sync meeting transcriptions & summaries to notion| [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-sync-meetings-to-notion)                        |
+| **pipe tagging activity**            | automatically tag activities using ai            | [link](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-tagging-activity)                         |
 
 </MotionDiv>
 
 ---
 
-## developing pipes in screenpipe
+## quick tour - developing pipes in screenpipe
 <MotionDiv delay={0.7}>
-<iframe width="100%" height="500" src="https://www.youtube.com/embed/icqhgzqhya?si=kjs4t94dqex48xky" title="youtube video player" frameborder="0" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; web-share" allowfullscreen></iframe>
 
 screenpipe's plugin system, referred to as **pipes**, allows you to create customized pipes that automate workflows. these pipes can process, annotate, analyze, summarize, or integrate your screen and audio data with other tools.
 
-users can begin by cloning an existing pipe, such as [pipe stream ocr text](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-stream-ocr-text). you can use any javascript/typescript modules to build your use case, from simple to highly advanced. the primary requirement is that the pipe folder must contain a file named `pipe.js`, `pipe.ts`, `main.js`, or `main.ts`. you can also export the final built file as `main.js` or `pipe.js`.
+users can begin by cloning an existing pipe, such as [pipe-email-daily-log](https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-email-daily-log). you can use any javascript/typescript to build your use case, from simple to highly advanced. the primary requirement is that the pipe folder must contain a file named `pipe.js` or `pipe.ts`. 
+
+```bash 
+git clone https://github.com/mediar-ai/screenpipe.git
+cp -r screenpipe/examples/typescript/pipe-email-daily-log screenpipe/examples/typescript/my-pipe
+```
 
 once the pipe is ready, follow these steps to make it work with `screenpipe`:
 
@@ -92,5 +98,27 @@ once the pipe is ready, follow these steps to make it work with `screenpipe`:
   ```
 
 this setup enables the creation of countless workflows tailored to specific needs, automating tedious or complex tasks.
+
+you can also load & enable pipes from the app UI, go to pipe store, and click relevant buttons.
+
+please send a PR with your pipe to the repo, we will review and merge it!
+
+we also do bounties for new pipes, or if you talk about screenpipe on social media, we give $100+!
+
+also we would love to build integration with Stripe, etc. so you can create a paid pipe for example and
+we would be happy to help you make money!
+
+### tips & hacks 
+
+- you can use `pipe.json` to let others pass configuration options to your pipe through the UI or CLI.
+- pipes have access to a special API that allows you to interact with your computer or special features like sending notifications, sending emails, etc.
+- check this [file](https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-core/src/deno/runtime.js) for more details.
+- in general we recommend using local LLMs like ollama as the data can be large and sensitive.
+
+### known limitations
+
+- you can only use JS/TS to build your pipes.
+- we did not figure out yet a way to use dependencies but some manage to do so, this is because pipes run in Deno runtime which is special.
+- you usually need to run the pipe in an infinite loop for example if it's something that process your data continuously, of course if this is for example an agent that summarize your day one shot it does not have to be infinite loop.
 
 </MotionDiv>

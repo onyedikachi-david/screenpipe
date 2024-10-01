@@ -23,25 +23,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "./ui/textarea";
 import { Slider } from "@/components/ui/slider"; // Add this import
 
-import { platform } from "@tauri-apps/plugin-os";
-import { Eye, EyeOff, HelpCircle, RefreshCw } from "lucide-react";
+import { Eye, EyeOff, HelpCircle, RefreshCw, Settings2 } from "lucide-react";
 import { RecordingSettings } from "./recording-settings";
-
+import { Switch } from "./ui/switch";
+import * as Sentry from "@sentry/react";
+import posthog from "posthog-js";
 export function Settings({ className }: { className?: string }) {
   const { settings, updateSettings, resetSetting } = useSettings();
   const [localSettings, setLocalSettings] = React.useState(settings);
-  const [currentPlatform, setCurrentPlatform] = React.useState<string>("");
   const [showApiKey, setShowApiKey] = React.useState(false);
 
   const handleApiUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    setLocalSettings((prev) => ({ ...prev, aiUrl: newValue }));
+    setLocalSettings({ ...localSettings, aiUrl: newValue });
     updateSettings({ aiUrl: newValue });
   };
 
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    setLocalSettings((prev) => ({ ...prev, openaiApiKey: newValue }));
+    setLocalSettings({ ...localSettings, openaiApiKey: newValue });
     updateSettings({ openaiApiKey: newValue });
   };
 
@@ -49,13 +49,13 @@ export function Settings({ className }: { className?: string }) {
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const newValue = e.target.value;
-    setLocalSettings((prev) => ({ ...prev, deepgramApiKey: newValue }));
+    setLocalSettings({ ...localSettings, deepgramApiKey: newValue });
     updateSettings({ deepgramApiKey: newValue });
   };
 
   const handleModelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    setLocalSettings((prev) => ({ ...prev, aiModel: newValue }));
+    setLocalSettings({ ...localSettings, aiModel: newValue });
     updateSettings({ aiModel: newValue });
   };
 
@@ -63,7 +63,7 @@ export function Settings({ className }: { className?: string }) {
     e: React.ChangeEvent<HTMLTextAreaElement>
   ) => {
     const newValue = e.target.value;
-    setLocalSettings((prev) => ({ ...prev, customPrompt: newValue }));
+    setLocalSettings({ ...localSettings, customPrompt: newValue });
     updateSettings({ customPrompt: newValue });
   };
 
@@ -73,25 +73,46 @@ export function Settings({ className }: { className?: string }) {
 
   const handleMaxContextCharsChange = (value: number[]) => {
     const newValue = value[0];
-    setLocalSettings((prev) => ({ ...prev, aiMaxContextChars: newValue }));
+    setLocalSettings({ ...localSettings, aiMaxContextChars: newValue });
     updateSettings({ aiMaxContextChars: newValue });
+  };
+
+  const handleAnalyticsToggle = (checked: boolean) => {
+    const newValue = checked;
+    setLocalSettings({ ...localSettings, analyticsEnabled: newValue });
+    updateSettings({ analyticsEnabled: newValue });
+
+    if (!newValue) {
+      posthog.capture("telemetry", {
+        enabled: false,
+      });
+      Sentry.init({
+        enabled: false,
+        dsn: "https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664",
+      });
+      Sentry.close();
+      posthog.opt_out_capturing();
+    } else {
+      posthog.opt_in_capturing();
+      posthog.capture("telemetry", {
+        enabled: true,
+      });
+      Sentry.init({
+        enabled: true,
+        dsn: "https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664",
+      });
+    }
   };
 
   React.useEffect(() => {
     setLocalSettings(settings);
-    setCurrentPlatform(platform());
   }, [settings]);
 
   return (
-    <Dialog
-      onOpenChange={(open) => {
-        if (!open) {
-          location.reload(); // ! HACK to properly refresh stuff (tood beter)
-        }
-      }}
-    >
+    <Dialog>
       <DialogTrigger asChild>
         <Button variant="ghost" className={className}>
+          <Settings2 className="mr-2 h-4 w-4" />
           settings
         </Button>
       </DialogTrigger>
@@ -106,7 +127,6 @@ export function Settings({ className }: { className?: string }) {
           <RecordingSettings
             localSettings={localSettings}
             setLocalSettings={setLocalSettings}
-            currentPlatform={currentPlatform}
           />
 
           <Separator />
@@ -350,6 +370,39 @@ export function Settings({ className }: { className?: string }) {
                   deepgram&apos;s website
                 </a>{" "}
                 or DM us on discord, it&apos;s on us!
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-center">privacy settings</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center space-y-4">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="analytics-toggle"
+                  checked={localSettings.analyticsEnabled}
+                  onCheckedChange={handleAnalyticsToggle}
+                />
+                <Label htmlFor="analytics-toggle">enable telemetry</Label>
+              </div>
+              <p className="text-sm text-muted-foreground text-center">
+                telemetry helps us improve screenpipe.
+                <br />
+                when enabled, we collect anonymous usage data such as button
+                clicks.
+                <br />
+                we do not collect any screen data, microphone, query data. read
+                more on our data privacy policy{" "}
+                <a
+                  href="https://screenpi.pe/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  here
+                </a>
               </p>
             </CardContent>
           </Card>

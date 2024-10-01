@@ -16,12 +16,11 @@ use screenpipe_audio::{
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server
+    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, logs::SingleFileRollingWriter, start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde_json::{json, Value};
 use tokio::{runtime::Runtime, signal, sync::broadcast};
-use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::Layer;
@@ -83,12 +82,12 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Set up file appender
-    let file_appender =
-        RollingFileAppender::new(Rotation::NEVER, local_data_dir.clone(), "screenpipe.log");
+    let log_file_path = local_data_dir.join("screenpipe.log");
+    let file_writer = SingleFileRollingWriter::new(log_file_path)?;
 
     // Create a custom layer for file logging
     let file_layer = fmt::layer()
-        .with_writer(file_appender)
+        .with_writer(file_writer)
         .with_ansi(false)
         .with_filter(EnvFilter::new("info"));
 
@@ -298,6 +297,8 @@ async fn main() -> anyhow::Result<()> {
         1.0
     };
 
+    let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
+
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
@@ -308,7 +309,7 @@ async fn main() -> anyhow::Result<()> {
                     db_clone.clone(),
                     output_path_clone.clone(),
                     fps,
-                    Duration::from_secs(cli.audio_chunk_duration),
+                    audio_chunk_duration, // use the new setting
                     Duration::from_secs(cli.video_chunk_duration),
                     vision_control_clone.clone(),
                     audio_devices_control.clone(),
@@ -646,20 +647,27 @@ async fn handle_pipe_command(pipe: PipeCommand, pipe_manager: &PipeManager) -> a
                 Err(e) => eprintln!("failed to update pipe config: {}", e),
             }
         }
-        PipeCommand::Purge => {
-            print!("are you sure you want to purge all pipes? this action cannot be undone. (y/N): ");
-            io::stdout().flush()?;
-            
-            let mut input = String::new();
-            io::stdin().read_line(&mut input)?;
-            
-            if input.trim().to_lowercase() == "y" {
+        PipeCommand::Purge { yes } => {
+            if yes {
                 match pipe_manager.purge_pipes().await {
                     Ok(_) => println!("all pipes purged successfully."),
                     Err(e) => eprintln!("failed to purge pipes: {}", e),
                 }
             } else {
-                println!("pipe purge cancelled.");
+                print!("are you sure you want to purge all pipes? this action cannot be undone. (y/N): ");
+                io::stdout().flush()?;
+                
+                let mut input = String::new();
+                io::stdin().read_line(&mut input)?;
+                
+                if input.trim().to_lowercase() == "y" {
+                    match pipe_manager.purge_pipes().await {
+                        Ok(_) => println!("all pipes purged successfully."),
+                        Err(e) => eprintln!("failed to purge pipes: {}", e),
+                    }
+                } else {
+                    println!("pipe purge cancelled.");
+                }
             }
         },
     }

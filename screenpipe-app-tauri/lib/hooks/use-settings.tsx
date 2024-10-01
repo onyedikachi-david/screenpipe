@@ -38,6 +38,8 @@ const defaultSettings: Settings = {
   aiMaxContextChars: 30000,
   fps: 0.5,
   vadSensitivity: "high",
+  analyticsEnabled: true,
+  audioChunkDuration: 30, // default to 10 seconds
 };
 
 export type VadSensitivity = "low" | "medium" | "high";
@@ -67,6 +69,8 @@ export interface Settings {
   aiMaxContextChars: number;
   fps: number;
   vadSensitivity: VadSensitivity;
+  analyticsEnabled: boolean;
+  audioChunkDuration: number; // new field
 }
 
 let store: Store | null = null;
@@ -162,6 +166,10 @@ export function useSettings() {
           (platform() === "macos" ? 0.2 : 1);
         const savedVadSensitivity =
           ((await store!.get("vadSensitivity")) as VadSensitivity) || "high";
+        const savedAnalyticsEnabled =
+          ((await store!.get("analyticsEnabled")) as boolean) || true;
+        const savedAudioChunkDuration =
+          ((await store!.get("audioChunkDuration")) as number) || 30;
         setSettings({
           openaiApiKey: savedKey,
           deepgramApiKey: savedDeepgramKey,
@@ -188,6 +196,8 @@ export function useSettings() {
           aiMaxContextChars: savedAiMaxContextChars,
           fps: savedFps,
           vadSensitivity: savedVadSensitivity,
+          analyticsEnabled: savedAnalyticsEnabled,
+          audioChunkDuration: savedAudioChunkDuration,
         });
       } catch (error) {
         console.error("Failed to load settings:", error);
